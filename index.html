@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sweef Einstellungen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: eine schmale Spalte wie ein Geraete-Menue; oben Live-Anzeige wie das Vario-Display, darunter Gruppen */
+:root {
+  --bg: #eef3f2;
+  --surface: #ffffff;
+  --fg: #11262b;
+  --muted: #5b7176;
+  --line: #d3dedd;
+  --accent: #0b7480;
+  --accent-fg: #ffffff;
+  --steigen: #1d8f4e;
+  --sinken: #c8433a;
+  --display-bg: #0b1416;
+  --display-fg: #e9f4f2;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1618; --surface: #132327; --fg: #e2eeee; --muted: #8fa6aa;
+    --line: #24383c; --accent: #3bbcc6; --accent-fg: #062226;
+    --steigen: #4cc985; --sinken: #ef7a6f; --display-bg: #050b0c; --display-fg: #e9f4f2;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1618; --surface: #132327; --fg: #e2eeee; --muted: #8fa6aa;
+  --line: #24383c; --accent: #3bbcc6; --accent-fg: #062226;
+  --steigen: #4cc985; --sinken: #ef7a6f; --display-bg: #050b0c; --display-fg: #e9f4f2;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.45 var(--f-body);
+  padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(32px, env(safe-area-inset-bottom, 0px));
+}
+.wrap { max-width: 520px; margin: 0 auto; display: grid; gap: 20px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { font: 700 1.9rem/1 var(--f-display); letter-spacing: .01em; margin: 0; }
+h1 small { display: block; font: 500 .8rem/1.2 var(--f-body); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-top: 4px; }
+button {
+  font: 600 1rem var(--f-body); border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--fg); padding: 10px 14px; cursor: pointer; min-height: 44px;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.status { font-size: .9rem; color: var(--muted); }
+.status b { color: var(--fg); }
+
+/* Live-Anzeige im Stil des Vario-Displays */
+.display {
+  background: var(--display-bg); color: var(--display-fg); border-radius: 14px; padding: 16px 18px;
+  display: grid; grid-template-columns: 1.3fr 1fr; gap: 6px 16px; align-items: end;
+  font-variant-numeric: tabular-nums;
+}
+.display .steig { grid-row: span 3; }
+.display .gross { font: 700 3.4rem/1 var(--f-display); }
+.display .gross.up { color: #57d68f; }
+.display .gross.down { color: #ff8a7f; }
+.display .lbl { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; opacity: .65; }
+.display .wert { font: 600 1.25rem/1.1 var(--f-display); }
+.display.aus { opacity: .5; }
+
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px 16px 10px; }
+section h2 { font: 600 1.15rem/1.2 var(--f-display); letter-spacing: .02em; margin: 12px 0 4px; }
+section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-width: 60ch; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.row:first-of-type { border-top: 0; }
+.row label { font-weight: 500; }
+.row .val { font: 600 1.05rem var(--f-display); font-variant-numeric: tabular-nums; min-width: 5.5em; text-align: right; }
+.row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+.row .sub { grid-column: 1 / -1; font-size: .82rem; color: var(--muted); margin-top: -2px; }
+.row input[type=number] {
+  font: 600 1.05rem var(--f-display); width: 7em; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); text-align: right;
+}
+.switch { width: 52px; height: 30px; accent-color: var(--accent); }
+
+.stufen { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 10px 0 6px; }
+.stufen button { padding: 8px 0; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; font-size: .8rem; }
+.stufen button i { display: block; width: 8px; background: currentColor; border-radius: 2px; }
+.stufen button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+
+.tests { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 6px; }
+.tests button { flex: 1 1 70px; font-family: var(--f-display); font-variant-numeric: tabular-nums; }
+.tests button.up { color: var(--steigen); }
+.tests button.down { color: var(--sinken); }
+
+.confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px 0; }
+.danger { color: var(--sinken); }
+.note { font-size: .85rem; color: var(--muted); }
+.melden { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: .92rem; max-width: calc(100% - 32px); }
+.gesperrt section { opacity: .55; pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) { button { transition: background .15s, transform .1s; } button:active { transform: scale(.98); } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <h1>Sweef<small>Einstellungen per Bluetooth</small></h1>
+    <button class="primary" id="verbinden">Verbinden</button>
+  </header>
+  <div class="status" id="status">Nicht verbunden. Vario einschalten, dann „Verbinden“ tippen.</div>
+
+  <div class="display aus" id="display" aria-live="polite">
+    <div class="steig">
+      <div class="lbl">Steigen m/s</div>
+      <div class="gross" id="lv">–</div>
+    </div>
+    <div><div class="lbl">Höhe</div><div class="wert" id="lh">– m</div></div>
+    <div><div class="lbl">über Meer</div><div class="wert" id="lnn">– m</div></div>
+    <div><div class="lbl">Flug</div><div class="wert" id="lfl">–</div></div>
+  </div>
+
+  <div id="einstellungen" class="gesperrt">
+    <div style="display:grid;gap:20px">
+    <section>
+      <h2>Lautstärke</h2>
+      <div class="stufen" id="stufen"></div>
+    </section>
+
+    <section>
+      <h2>Ton testen</h2>
+      <p class="hint">Spielt 4 Sekunden lang den Ton für diesen Steigwert. So hörst du Änderungen sofort, ohne zu fliegen.</p>
+      <div class="tests" id="tests"></div>
+    </section>
+
+    <section id="ton"><h2>Piepton</h2></section>
+    <section id="hoehe"><h2>Höhe</h2>
+      <p class="hint">Für eine genaue Höhe über Meer entweder die Höhe des Startplatzes eintragen und dort die Höhe nullen, oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
+    </section>
+    <section id="anzeige"><h2>Display</h2></section>
+    <section id="flug"><h2>Flugerkennung</h2></section>
+
+    <section>
+      <h2>Zurücksetzen</h2>
+      <div class="confirm" id="resetBox">
+        <button id="reset">Alle Einstellungen zurücksetzen</button>
+      </div>
+    </section>
+    </div>
+  </div>
+  <p class="note">Funktioniert in Chrome auf Android, Windows und Mac. Auf dem iPhone braucht es die App „Bluefy“, weil Safari kein Bluetooth für Webseiten kann.</p>
+</div>
+
+<script>
+// ---- Bluetooth-Kennungen (muessen zum Vario-Programm passen) ----
+const DIENST = "7e5e0001-b5a3-f393-e0a9-e50e24dcca9e";
+const EINST  = "7e5e0002-b5a3-f393-e0a9-e50e24dcca9e";
+const BEFEHL = "7e5e0003-b5a3-f393-e0a9-e50e24dcca9e";
+const LIVE   = "7e5e0004-b5a3-f393-e0a9-e50e24dcca9e";
+
+// ---- Einstellungen: Kuerzel, Gruppe, Name, Einheit, min, max, Schritt, Art ----
+const FELDER = [
+  ["se","ton","Steigton ab","m/s",0,1.5,0.05,"range","Ab diesem Steigen piept es."],
+  ["sk","ton","Sinkalarm ab","m/s",-8,-0.5,0.5,"range","Dauerton bei starkem Sinken."],
+  ["f1","ton","Tonhöhe bei schwachem Steigen","Hz",300,2000,50,"range"],
+  ["f2","ton","Tonhöhe bei starkem Steigen","Hz",800,4000,50,"range"],
+  ["fk","ton","Tonhöhe Sinkalarm","Hz",200,1500,50,"range"],
+  ["fs","ton","Ton-Skala","m/s",2,30,0.5,"range","Bei diesem Steigen ist der Ton am höchsten und schnellsten. Größer = ruhiger."],
+  ["tl","ton","Takt bei schwachem Steigen","ms",300,2000,10,"range","Dauer von Piep + Pause."],
+  ["ts","ton","Takt bei starkem Steigen","ms",100,1000,10,"range"],
+  ["pa","ton","Piep-Anteil","%",10,90,5,"range","Wie viel vom Takt der Ton klingt. Kleiner = kürzere Pieps."],
+  ["nn","hoehe","Startplatz über Meer","m",-100,5000,1,"number","0 = nicht benutzen."],
+  ["qn","hoehe","QNH","hPa",0,1100,0.1,"number","Luftdruck auf Meereshöhe, z. B. 1018. 0 = nicht benutzen."],
+  ["pf","anzeige","Pfeil anzeigen","",0,1,1,"switch"],
+  ["ph","anzeige","Pfeil nur als Umriss","",0,1,1,"switch"],
+  ["pt","anzeige","Pfeil-Tempo","",1,80,1,"range","Pixel pro Sekunde je 1 m/s."],
+  ["fh","flug","Start bei Höhenänderung","m",1,30,0.5,"range"],
+  ["fd","flug","… mindestens so lange","s",2,60,1,"range","Verhindert Fehlstarts durch Böen."],
+  ["lr","flug","Landung nach Ruhe von","s",20,900,10,"range","So lange ruhig auf gleicher Höhe = gelandet."],
+];
+const TESTS = [0.3, 0.8, 1.5, 3, 5, -3];
+
+let befehlKanal = null, geraet = null, warteschlange = Promise.resolve();
+const $ = id => document.getElementById(id);
+
+function zahl(wert, schritt) {
+  const stellen = schritt < 0.1 ? 2 : schritt < 1 ? 1 : 0;
+  return Number(wert).toLocaleString("de-DE", { minimumFractionDigits: stellen, maximumFractionDigits: stellen });
+}
+function melden(text) {
+  let el = document.querySelector(".melden");
+  if (!el) { el = document.createElement("div"); el.className = "melden"; el.setAttribute("role", "status"); document.body.appendChild(el); }
+  el.textContent = text; el.hidden = false;
+  clearTimeout(el._t); el._t = setTimeout(() => el.hidden = true, 2200);
+}
+
+// ---- Bedienelemente aufbauen ----
+FELDER.forEach(([k, gruppe, name, einheit, min, max, schritt, art, hinweis]) => {
+  const row = document.createElement("div");
+  row.className = "row";
+  const id = "e_" + k;
+  if (art === "switch") {
+    row.innerHTML = `<label for="${id}">${name}</label><input type="checkbox" class="switch" id="${id}">`;
+  } else if (art === "number") {
+    row.innerHTML = `<label for="${id}">${name}</label><span><input type="number" id="${id}" min="${min}" max="${max}" step="${schritt}" inputmode="decimal"> ${einheit}</span>`;
+  } else {
+    row.innerHTML = `<label for="${id}">${name}</label><span class="val" id="v_${k}">–</span>
+      <input type="range" id="${id}" min="${min}" max="${max}" step="${schritt}">`;
+  }
+  if (hinweis) row.insertAdjacentHTML("beforeend", `<div class="sub">${hinweis}</div>`);
+  $(gruppe).appendChild(row);
+  const input = row.querySelector("input");
+  input.dataset.einheit = einheit; input.dataset.schritt = schritt;
+  if (art === "range") input.addEventListener("input", () => $("v_" + k).textContent = zahl(input.value, schritt) + " " + einheit);
+  input.addEventListener("change", () => {
+    const wert = art === "switch" ? (input.checked ? 1 : 0) : input.value;
+    senden(`${k}=${wert}`, name + " gespeichert");
+  });
+});
+
+for (let s = 0; s <= 6; s++) {
+  const b = document.createElement("button");
+  b.dataset.stufe = s;
+  b.setAttribute("aria-pressed", "false");
+  b.innerHTML = s === 0 ? "stumm" : `<i style="height:${4 + s * 4}px"></i>${s}`;
+  b.addEventListener("click", () => { senden("ls=" + s, s ? "Lautstärke " + s : "Stumm"); stufeZeigen(s); });
+  $("stufen").appendChild(b);
+}
+function stufeZeigen(s) { document.querySelectorAll("#stufen button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.stufe == s))); }
+
+TESTS.forEach(t => {
+  const b = document.createElement("button");
+  b.className = t > 0 ? "up" : "down";
+  b.textContent = (t > 0 ? "+" : "") + zahl(t, 0.1);
+  b.setAttribute("aria-label", "Ton testen bei " + zahl(t, 0.1) + " Meter pro Sekunde");
+  b.addEventListener("click", () => senden("test=" + t, "Teste " + zahl(t, 0.1) + " m/s"));
+  $("tests").appendChild(b);
+});
+
+function resetZurueck() {
+  $("resetBox").innerHTML = `<button id="reset">Alle Einstellungen zurücksetzen</button>`;
+  bindReset();
+}
+function bindReset() {
+  $("reset").onclick = () => {
+    $("resetBox").innerHTML = `<span>Wirklich alles auf die Grundeinstellung?</span>
+      <button class="danger" id="resetJa">Ja, zurücksetzen</button><button id="resetNein">Abbrechen</button>`;
+    $("resetJa").onclick = () => { senden("reset", "Zurückgesetzt"); resetZurueck(); };
+    $("resetNein").onclick = resetZurueck;
+  };
+}
+bindReset();
+
+// ---- Texte vom Vario lesen: "se=0.1;sk=-2.5;..." ----
+function zerlegen(text) {
+  const daten = {};
+  text.split(";").forEach(teil => { const [k, w] = teil.split("="); if (k && w !== undefined) daten[k.trim()] = w.trim(); });
+  return daten;
+}
+function einstellungenZeigen(text) {
+  const d = zerlegen(text);
+  FELDER.forEach(([k, , , einheit, , , schritt, art]) => {
+    if (!(k in d)) return;
+    const input = $("e_" + k);
+    if (document.activeElement === input) return;           // nicht beim Tippen ueberschreiben
+    if (art === "switch") input.checked = d[k] === "1";
+    else input.value = d[k];
+    if (art === "range") $("v_" + k).textContent = zahl(d[k], schritt) + " " + einheit;
+  });
+  if ("ls" in d) stufeZeigen(d.ls);
+}
+function liveZeigen(text) {
+  const d = zerlegen(text);
+  const v = parseFloat(d.v);
+  const el = $("lv");
+  el.textContent = (v > 0 ? "+" : "") + zahl(v, 0.1);
+  el.className = "gross" + (v >= 0.1 ? " up" : v <= -0.1 ? " down" : "");
+  $("lh").textContent = d.h + " m";
+  $("lnn").textContent = Math.round(parseFloat(d.nn)) + " m";
+  const t = parseInt(d.t || "0");
+  $("lfl").textContent = d.fl === "1" ? `fliegt · ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}` : "am Boden";
+  if ("ls" in d) stufeZeigen(d.ls);
+}
+
+// ---- Senden (immer nacheinander, sonst meckert Bluetooth) ----
+function senden(text, meldung) {
+  if (!befehlKanal) { melden("Erst verbinden"); return; }
+  warteschlange = warteschlange
+    .then(() => befehlKanal.writeValueWithResponse(new TextEncoder().encode(text)))
+    .then(() => meldung && melden(meldung))
+    .catch(e => melden("Senden fehlgeschlagen: " + e.message));
+}
+
+// ---- Verbinden ----
+$("verbinden").addEventListener("click", async () => {
+  if (geraet && geraet.gatt.connected) { geraet.gatt.disconnect(); return; }
+  if (!navigator.bluetooth) {
+    $("status").innerHTML = "<b>Dieser Browser kann kein Bluetooth.</b> Öffne die Seite in Chrome (Android, Windows, Mac) oder auf dem iPhone in der App „Bluefy“.";
+    return;
+  }
+  try {
+    $("status").textContent = "Suche Sweef …";
+    geraet = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "Sweef" }], optionalServices: [DIENST] });
+    geraet.addEventListener("gattserverdisconnected", getrennt);
+    $("status").textContent = "Verbinde …";
+    const server = await geraet.gatt.connect();
+    const dienst = await server.getPrimaryService(DIENST);
+    const einst = await dienst.getCharacteristic(EINST);
+    befehlKanal = await dienst.getCharacteristic(BEFEHL);
+    const live = await dienst.getCharacteristic(LIVE);
+    const dec = new TextDecoder();
+    einstellungenZeigen(dec.decode(await einst.readValue()));
+    einst.addEventListener("characteristicvaluechanged", e => einstellungenZeigen(dec.decode(e.target.value)));
+    await einst.startNotifications();
+    live.addEventListener("characteristicvaluechanged", e => liveZeigen(dec.decode(e.target.value)));
+    await live.startNotifications();
+    $("status").innerHTML = "<b>Verbunden</b> mit " + (geraet.name || "Sweef") + ". Änderungen werden sofort im Vario gespeichert.";
+    $("verbinden").textContent = "Trennen";
+    $("einstellungen").classList.remove("gesperrt");
+    $("display").classList.remove("aus");
+  } catch (e) {
+    $("status").textContent = e.name === "NotFoundError" ? "Kein Gerät ausgewählt." : "Verbindung fehlgeschlagen: " + e.message;
+  }
+});
+function getrennt() {
+  befehlKanal = null;
+  $("status").textContent = "Verbindung getrennt.";
+  $("verbinden").textContent = "Verbinden";
+  $("einstellungen").classList.add("gesperrt");
+  $("display").classList.add("aus");
+}
+</script>
+</body>
+</html>

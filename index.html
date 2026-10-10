@@ -177,7 +177,7 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
         <p class="hint">Für eine genaue Höhe über Meer entweder die Höhe des Startplatzes eintragen und dort die Höhe nullen, oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
       </section>
       <section id="anzeige"><h2>Display</h2></section>
-      <section id="flug"><h2>Flugerkennung</h2></section>
+      <section id="flug"><h2>Flugerkennung und Ausschalten</h2></section>
       <section>
         <h2>Zurücksetzen</h2>
         <div class="confirm" id="resetBox"></div>
@@ -258,6 +258,7 @@ const FELDER = [
   ["fh","flug","Start bei Höhenänderung","m",1,30,0.5,"range"],
   ["fd","flug","… mindestens so lange","s",2,60,1,"range","Verhindert Fehlstarts durch Böen."],
   ["lr","flug","Landung nach Ruhe von","s",20,900,10,"range","So lange ruhig auf gleicher Höhe = gelandet."],
+  ["ao","flug","Automatisch ausschalten nach","min",0,240,5,"range","Wenn das Vario am Boden so lange nicht bewegt wird. Vorher warnt es 30 Sekunden lang. 0 = nie."],
 ];
 const TESTS = [0.3, 0.8, 1.5, 3, 5, -3];
 
@@ -565,13 +566,13 @@ function dateiName(f) {
 }
 $("csv").onclick = () => {
   const f = aktuellerFlug; if (!f) return;
-  const zeilen = ["Sekunde;Uhrzeit;Hoehe_m;Hoehe_ueber_Meer_m;Steigen_m_s"];
+  const zeilen = ["Sekunde;Uhrzeit;Höhe_m;Höhe_über_Meer_m;Steigen_m_s"];
   f.hoehe.forEach((m, i) => {
     const t = f.start ? new Date(f.start + i * 1000).toLocaleTimeString("de-DE") : "";
     const v = i > 0 ? m - f.hoehe[i - 1] : 0;
     zeilen.push([i, t, m.toFixed(1), f.nn ? (m + f.nn).toFixed(1) : "", v.toFixed(1)].join(";").replace(/\./g, ","));
   });
-  herunterladen(dateiName(f) + ".csv", zeilen.join("\n"), "text/csv");
+  herunterladen(dateiName(f) + ".csv", "\ufeff" + zeilen.join("\n"), "text/csv;charset=utf-8");
 };
 $("sichern").onclick = async () => {
   const alle = await dbAlle();

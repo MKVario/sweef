@@ -3,11 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sweef Einstellungen</title>
+<title>Sweef</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<meta name="theme-color" content="#0b7480">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
 <style>
-/* Layout: eine schmale Spalte wie ein Geraete-Menue; oben Live-Anzeige wie das Vario-Display, darunter Gruppen */
+/* Layout: eine schmale Spalte wie ein Geraete-Menue; oben Live-Anzeige wie das Vario-Display, Reiter fuer Vario und Fluege */
 :root {
   --bg: #eef3f2;
   --surface: #ffffff;
@@ -40,26 +43,31 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+[hidden] { display: none !important; }
 body {
   background: var(--bg); color: var(--fg);
   font: 16px/1.45 var(--f-body);
   padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(32px, env(safe-area-inset-bottom, 0px));
 }
-.wrap { max-width: 520px; margin: 0 auto; display: grid; gap: 20px; }
+.wrap { max-width: 560px; margin: 0 auto; display: grid; gap: 18px; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 h1 { font: 700 1.9rem/1 var(--f-display); letter-spacing: .01em; margin: 0; }
 h1 small { display: block; font: 500 .8rem/1.2 var(--f-body); color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-top: 4px; }
-button {
+button, .knopf {
   font: 600 1rem var(--f-body); border-radius: 10px; border: 1px solid var(--line);
   background: var(--surface); color: var(--fg); padding: 10px 14px; cursor: pointer; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
 }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 button:disabled { opacity: .45; cursor: default; }
-button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, .knopf:focus-within { outline: 3px solid var(--accent); outline-offset: 2px; }
 .status { font-size: .9rem; color: var(--muted); }
 .status b { color: var(--fg); }
 
-/* Live-Anzeige im Stil des Vario-Displays */
+.reiter { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+.reiter button { border: 0; min-height: 40px; }
+.reiter button[aria-selected=true] { background: var(--accent); color: var(--accent-fg); }
+
 .display {
   background: var(--display-bg); color: var(--display-fg); border-radius: 14px; padding: 16px 18px;
   display: grid; grid-template-columns: 1.3fr 1fr; gap: 6px 16px; align-items: end;
@@ -73,7 +81,8 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); ou
 .display .wert { font: 600 1.25rem/1.1 var(--f-display); }
 .display.aus { opacity: .5; }
 
-section { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px 16px 10px; }
+.stapel { display: grid; gap: 18px; }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px 16px 10px; min-width: 0; }
 section h2 { font: 600 1.15rem/1.2 var(--f-display); letter-spacing: .02em; margin: 12px 0 4px; }
 section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-width: 60ch; }
 .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
@@ -87,30 +96,51 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
   border: 1px solid var(--line); background: var(--bg); color: var(--fg); text-align: right;
 }
 .switch { width: 52px; height: 30px; accent-color: var(--accent); }
-
 .stufen { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 10px 0 6px; }
-.stufen button { padding: 8px 0; min-height: 48px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; font-size: .8rem; }
+.stufen button { padding: 8px 0; min-height: 48px; flex-direction: column; justify-content: flex-end; gap: 4px; font-size: .8rem; }
 .stufen button i { display: block; width: 8px; background: currentColor; border-radius: 2px; }
 .stufen button[aria-pressed=true] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-
 .tests { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0 6px; }
 .tests button { flex: 1 1 70px; font-family: var(--f-display); font-variant-numeric: tabular-nums; }
 .tests button.up { color: var(--steigen); }
 .tests button.down { color: var(--sinken); }
-
 .confirm { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px 0; }
 .danger { color: var(--sinken); }
 .note { font-size: .85rem; color: var(--muted); }
+.knopfreihe { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 0; }
+.knopfreihe > * { flex: 1 1 140px; }
+.fortschritt { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin: 6px 0 2px; }
+.fortschritt i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+/* Flugliste */
+.fluege { list-style: none; margin: 0; padding: 0; }
+.fluege li { border-top: 1px solid var(--line); }
+.fluege li:first-child { border-top: 0; }
+.fluege button { width: 100%; border: 0; border-radius: 0; background: none; padding: 12px 0; display: grid; grid-template-columns: 1fr auto; text-align: left; gap: 2px 12px; }
+.fluege .datum { font-weight: 600; }
+.fluege .dauer { font: 600 1.15rem var(--f-display); font-variant-numeric: tabular-nums; text-align: right; }
+.fluege .klein { font-size: .85rem; color: var(--muted); font-weight: 400; grid-column: 1 / -1; font-variant-numeric: tabular-nums; }
+.leer { color: var(--muted); padding: 10px 0 14px; margin: 0; }
+
+/* Flugdetails */
+.werte { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 8px 0 12px; font-variant-numeric: tabular-nums; }
+.werte div { display: grid; gap: 2px; }
+.werte .lbl { font-size: .72rem; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.werte .w { font: 600 1.3rem/1.1 var(--f-display); }
+.werte .w.up { color: var(--steigen); }
+.werte .w.down { color: var(--sinken); }
+.kurve { width: 100%; height: 240px; display: block; }
 .melden { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: .92rem; max-width: calc(100% - 32px); }
-.gesperrt section { opacity: .55; pointer-events: none; }
+  background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: .92rem; max-width: calc(100% - 32px); z-index: 5; }
+.gesperrt { opacity: .55; pointer-events: none; }
 @media (prefers-reduced-motion: no-preference) { button { transition: background .15s, transform .1s; } button:active { transform: scale(.98); } }
+@media (max-width: 380px) { .werte { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 </head>
 <body>
 <div class="wrap" id="app">
   <header>
-    <h1>Sweef<small>Einstellungen per Bluetooth</small></h1>
+    <h1>Sweef<small>Vario per Bluetooth</small></h1>
     <button class="primary" id="verbinden">Verbinden</button>
   </header>
   <div class="status" id="status">Nicht verbunden. Vario einschalten, dann „Verbinden“ tippen.</div>
@@ -125,45 +155,91 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
     <div><div class="lbl">Flug</div><div class="wert" id="lfl">–</div></div>
   </div>
 
-  <div id="einstellungen" class="gesperrt">
-    <div style="display:grid;gap:20px">
-    <section>
-      <h2>Lautstärke</h2>
-      <div class="stufen" id="stufen"></div>
-    </section>
+  <div class="reiter" role="tablist">
+    <button role="tab" id="tabVario" aria-selected="true" aria-controls="seiteVario">Einstellungen</button>
+    <button role="tab" id="tabFluege" aria-selected="false" aria-controls="seiteFluege">Flüge</button>
+  </div>
 
-    <section>
-      <h2>Ton testen</h2>
-      <p class="hint">Spielt 4 Sekunden lang den Ton für diesen Steigwert. So hörst du Änderungen sofort, ohne zu fliegen.</p>
-      <div class="tests" id="tests"></div>
-    </section>
-
-    <section id="ton"><h2>Piepton</h2></section>
-    <section id="hoehe"><h2>Höhe</h2>
-      <p class="hint">Für eine genaue Höhe über Meer entweder die Höhe des Startplatzes eintragen und dort die Höhe nullen, oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
-    </section>
-    <section id="anzeige"><h2>Display</h2></section>
-    <section id="flug"><h2>Flugerkennung</h2></section>
-
-    <section>
-      <h2>Zurücksetzen</h2>
-      <div class="confirm" id="resetBox">
-        <button id="reset">Alle Einstellungen zurücksetzen</button>
-      </div>
-    </section>
+  <!-- ===== Einstellungen ===== -->
+  <div id="seiteVario" class="stapel" role="tabpanel">
+    <div id="einstellungen" class="stapel gesperrt">
+      <section>
+        <h2>Lautstärke</h2>
+        <div class="stufen" id="stufen"></div>
+      </section>
+      <section>
+        <h2>Ton testen</h2>
+        <p class="hint">Spielt 4 Sekunden lang den Ton für diesen Steigwert. So hörst du Änderungen sofort, ohne zu fliegen.</p>
+        <div class="tests" id="tests"></div>
+      </section>
+      <section id="ton"><h2>Piepton</h2></section>
+      <section id="hoehe"><h2>Höhe</h2>
+        <p class="hint">Für eine genaue Höhe über Meer entweder die Höhe des Startplatzes eintragen und dort die Höhe nullen, oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
+      </section>
+      <section id="anzeige"><h2>Display</h2></section>
+      <section id="flug"><h2>Flugerkennung</h2></section>
+      <section>
+        <h2>Zurücksetzen</h2>
+        <div class="confirm" id="resetBox"></div>
+      </section>
     </div>
   </div>
-  <p class="note">Funktioniert in Chrome auf Android, Windows und Mac. Auf dem iPhone braucht es die App „Bluefy“, weil Safari kein Bluetooth für Webseiten kann.</p>
+
+  <!-- ===== Fluege ===== -->
+  <div id="seiteFluege" class="stapel" role="tabpanel" hidden>
+    <section id="flugDetail" hidden>
+      <div class="knopfreihe" style="padding-top:12px">
+        <button id="zurueck">← Alle Flüge</button>
+        <button id="csv">Als Tabelle (CSV)</button>
+      </div>
+      <h2 id="dTitel">Flug</h2>
+      <div class="werte" id="dWerte"></div>
+      <canvas class="kurve" id="kurve" role="img" aria-label="Höhenkurve des Flugs"></canvas>
+      <p class="note" id="kurveLegende">Linie: Höhe über Startplatz. Balken unten: Steigen (grün) und Sinken (rot), über 10 Sekunden gemittelt.</p>
+      <div class="confirm" id="flugLoeschenBox"></div>
+    </section>
+
+    <div id="flugUebersicht" class="stapel">
+      <section>
+        <h2>Vom Vario laden</h2>
+        <p class="hint" id="varioInfo">Mit dem Vario verbinden, dann werden neue Flüge hier aufs Handy übertragen.</p>
+        <div class="fortschritt" id="ladeBalken" hidden><i></i></div>
+        <div class="knopfreihe">
+          <button class="primary" id="laden" disabled>Neue Flüge laden</button>
+        </div>
+        <div class="confirm" id="varioLoeschenBox"></div>
+      </section>
+
+      <section>
+        <h2>Auf dem Handy</h2>
+        <ul class="fluege" id="liste"></ul>
+        <p class="leer" id="listeLeer">Noch keine Flüge gespeichert. Nach dem ersten Flug: verbinden und „Neue Flüge laden“ tippen.</p>
+      </section>
+
+      <section>
+        <h2>Sichern</h2>
+        <p class="hint">Die Flüge liegen im Speicher dieser Seite auf dem Handy. Wenn du in Chrome die Website-Daten löschst, sind sie weg. Mach deshalb ab und zu eine Sicherung.</p>
+        <div class="knopfreihe">
+          <button id="sichern">Sicherung speichern</button>
+          <label class="knopf" for="laden_datei">Sicherung laden<input type="file" id="laden_datei" accept=".json,application/json" hidden></label>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <p class="note">Funktioniert in Chrome auf Android, Windows und Mac. Einmal geöffnet, geht die Seite auch ohne Internet.</p>
 </div>
 
 <script>
-// ---- Bluetooth-Kennungen (muessen zum Vario-Programm passen) ----
+// ================================================================
+// Bluetooth-Kennungen (muessen zum Vario-Programm passen)
+// ================================================================
 const DIENST = "7e5e0001-b5a3-f393-e0a9-e50e24dcca9e";
 const EINST  = "7e5e0002-b5a3-f393-e0a9-e50e24dcca9e";
 const BEFEHL = "7e5e0003-b5a3-f393-e0a9-e50e24dcca9e";
 const LIVE   = "7e5e0004-b5a3-f393-e0a9-e50e24dcca9e";
+const DATEN  = "7e5e0005-b5a3-f393-e0a9-e50e24dcca9e";
 
-// ---- Einstellungen: Kuerzel, Gruppe, Name, Einheit, min, max, Schritt, Art ----
 const FELDER = [
   ["se","ton","Steigton ab","m/s",0,1.5,0.05,"range","Ab diesem Steigen piept es."],
   ["sk","ton","Sinkalarm ab","m/s",-8,-0.5,0.5,"range","Dauerton bei starkem Sinken."],
@@ -187,6 +263,7 @@ const TESTS = [0.3, 0.8, 1.5, 3, 5, -3];
 
 let befehlKanal = null, geraet = null, warteschlange = Promise.resolve();
 const $ = id => document.getElementById(id);
+const dec = new TextDecoder();
 
 function zahl(wert, schritt) {
   const stellen = schritt < 0.1 ? 2 : schritt < 1 ? 1 : 0;
@@ -196,10 +273,42 @@ function melden(text) {
   let el = document.querySelector(".melden");
   if (!el) { el = document.createElement("div"); el.className = "melden"; el.setAttribute("role", "status"); document.body.appendChild(el); }
   el.textContent = text; el.hidden = false;
-  clearTimeout(el._t); el._t = setTimeout(() => el.hidden = true, 2200);
+  clearTimeout(el._t); el._t = setTimeout(() => el.hidden = true, 2400);
+}
+function bestaetigenBox(box, knopfText, frage, jaText, aktion) {
+  const zeigen = () => {
+    box.innerHTML = "";
+    const b = document.createElement("button");
+    b.textContent = knopfText; b.className = "danger";
+    b.onclick = () => {
+      box.innerHTML = `<span>${frage}</span>`;
+      const ja = document.createElement("button"); ja.className = "danger"; ja.textContent = jaText;
+      const nein = document.createElement("button"); nein.textContent = "Abbrechen";
+      ja.onclick = () => { aktion(); zeigen(); };
+      nein.onclick = zeigen;
+      box.append(ja, nein);
+    };
+    box.appendChild(b);
+  };
+  zeigen();
 }
 
-// ---- Bedienelemente aufbauen ----
+// ---- Reiter ----
+function reiter(welcher) {
+  const fl = welcher === "fluege";
+  $("tabVario").setAttribute("aria-selected", String(!fl));
+  $("tabFluege").setAttribute("aria-selected", String(fl));
+  $("seiteVario").hidden = fl;
+  $("seiteFluege").hidden = !fl;
+  if (fl) listeZeigen();
+  try { localStorage.setItem("sweefReiter", welcher); } catch (e) {}
+}
+$("tabVario").onclick = () => reiter("vario");
+$("tabFluege").onclick = () => reiter("fluege");
+
+// ================================================================
+// Einstellungen
+// ================================================================
 FELDER.forEach(([k, gruppe, name, einheit, min, max, schritt, art, hinweis]) => {
   const row = document.createElement("div");
   row.className = "row";
@@ -215,14 +324,12 @@ FELDER.forEach(([k, gruppe, name, einheit, min, max, schritt, art, hinweis]) => 
   if (hinweis) row.insertAdjacentHTML("beforeend", `<div class="sub">${hinweis}</div>`);
   $(gruppe).appendChild(row);
   const input = row.querySelector("input");
-  input.dataset.einheit = einheit; input.dataset.schritt = schritt;
   if (art === "range") input.addEventListener("input", () => $("v_" + k).textContent = zahl(input.value, schritt) + " " + einheit);
   input.addEventListener("change", () => {
     const wert = art === "switch" ? (input.checked ? 1 : 0) : input.value;
     senden(`${k}=${wert}`, name + " gespeichert");
   });
 });
-
 for (let s = 0; s <= 6; s++) {
   const b = document.createElement("button");
   b.dataset.stufe = s;
@@ -232,7 +339,6 @@ for (let s = 0; s <= 6; s++) {
   $("stufen").appendChild(b);
 }
 function stufeZeigen(s) { document.querySelectorAll("#stufen button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.stufe == s))); }
-
 TESTS.forEach(t => {
   const b = document.createElement("button");
   b.className = t > 0 ? "up" : "down";
@@ -241,22 +347,8 @@ TESTS.forEach(t => {
   b.addEventListener("click", () => senden("test=" + t, "Teste " + zahl(t, 0.1) + " m/s"));
   $("tests").appendChild(b);
 });
+bestaetigenBox($("resetBox"), "Alle Einstellungen zurücksetzen", "Wirklich alles auf die Grundeinstellung?", "Ja, zurücksetzen", () => senden("reset", "Zurückgesetzt"));
 
-function resetZurueck() {
-  $("resetBox").innerHTML = `<button id="reset">Alle Einstellungen zurücksetzen</button>`;
-  bindReset();
-}
-function bindReset() {
-  $("reset").onclick = () => {
-    $("resetBox").innerHTML = `<span>Wirklich alles auf die Grundeinstellung?</span>
-      <button class="danger" id="resetJa">Ja, zurücksetzen</button><button id="resetNein">Abbrechen</button>`;
-    $("resetJa").onclick = () => { senden("reset", "Zurückgesetzt"); resetZurueck(); };
-    $("resetNein").onclick = resetZurueck;
-  };
-}
-bindReset();
-
-// ---- Texte vom Vario lesen: "se=0.1;sk=-2.5;..." ----
 function zerlegen(text) {
   const daten = {};
   text.split(";").forEach(teil => { const [k, w] = teil.split("="); if (k && w !== undefined) daten[k.trim()] = w.trim(); });
@@ -267,7 +359,7 @@ function einstellungenZeigen(text) {
   FELDER.forEach(([k, , , einheit, , , schritt, art]) => {
     if (!(k in d)) return;
     const input = $("e_" + k);
-    if (document.activeElement === input) return;           // nicht beim Tippen ueberschreiben
+    if (document.activeElement === input) return;
     if (art === "switch") input.checked = d[k] === "1";
     else input.value = d[k];
     if (art === "range") $("v_" + k).textContent = zahl(d[k], schritt) + " " + einheit;
@@ -286,21 +378,337 @@ function liveZeigen(text) {
   $("lfl").textContent = d.fl === "1" ? `fliegt · ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}` : "am Boden";
   if ("ls" in d) stufeZeigen(d.ls);
 }
-
-// ---- Senden (immer nacheinander, sonst meckert Bluetooth) ----
 function senden(text, meldung) {
-  if (!befehlKanal) { melden("Erst verbinden"); return; }
+  if (!befehlKanal) { melden("Erst verbinden"); return Promise.resolve(); }
   warteschlange = warteschlange
     .then(() => befehlKanal.writeValueWithResponse(new TextEncoder().encode(text)))
     .then(() => meldung && melden(meldung))
     .catch(e => melden("Senden fehlgeschlagen: " + e.message));
+  return warteschlange;
 }
 
-// ---- Verbinden ----
+// ================================================================
+// Speicher auf dem Handy (IndexedDB)
+// ================================================================
+let dbPromise = null;
+function db() {
+  if (!dbPromise) dbPromise = new Promise((ok, fehler) => {
+    const r = indexedDB.open("sweef", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("fluege", { keyPath: "key" });
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => fehler(r.error);
+  });
+  return dbPromise;
+}
+async function dbAlle() {
+  const d = await db();
+  return new Promise((ok, fehler) => {
+    const r = d.transaction("fluege").objectStore("fluege").getAll();
+    r.onsuccess = () => ok(r.result); r.onerror = () => fehler(r.error);
+  });
+}
+async function dbSchreiben(flug) {
+  const d = await db();
+  return new Promise((ok, fehler) => {
+    const t = d.transaction("fluege", "readwrite");
+    t.objectStore("fluege").put(flug);
+    t.oncomplete = ok; t.onerror = () => fehler(t.error);
+  });
+}
+async function dbLoeschen(key) {
+  const d = await db();
+  return new Promise((ok, fehler) => {
+    const t = d.transaction("fluege", "readwrite");
+    t.objectStore("fluege").delete(key);
+    t.oncomplete = ok; t.onerror = () => fehler(t.error);
+  });
+}
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+// ================================================================
+// Auswertung eines Flugs
+// ================================================================
+// Ein Flug: { key, start (ms), startGenau, vor, nn, hoehe: [Meter pro Sekunde] }
+function auswerten(f) {
+  const h = f.hoehe, n = h.length;
+  const ab = Math.min(f.vor || 0, n - 1);
+  const startH = h[ab] ?? 0;
+  let max = -Infinity, gewinn = 0, best = 0, sink = 0;
+  // geglaettet ueber 5 s fuer den Hoehengewinn
+  const glatt = h.map((_, i) => { let s = 0, c = 0; for (let j = Math.max(0, i - 2); j <= Math.min(n - 1, i + 2); j++) { s += h[j]; c++; } return s / c; });
+  for (let i = ab; i < n; i++) {
+    if (h[i] > max) max = h[i];
+    if (i > ab && glatt[i] > glatt[i - 1]) gewinn += glatt[i] - glatt[i - 1];
+    if (i >= ab + 10) {
+      const v10 = (h[i] - h[i - 10]) / 10;
+      if (v10 > best) best = v10;
+      if (v10 < sink) sink = v10;
+    }
+  }
+  return { dauer: Math.max(0, n - ab), max, maxNN: max + (f.nn || 0), startH, gewinn, best, sink, ab };
+}
+function dauerText(s) { const m = Math.round(s / 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`; }
+function datumText(f) {
+  if (!f.start) return "Datum unbekannt";
+  const d = new Date(f.start);
+  return (f.startGenau ? "" : "ca. ") + d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" }) +
+    " · " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+
+// ---- Liste ----
+let alleFluege = [];
+async function listeZeigen() {
+  try { alleFluege = await dbAlle(); } catch (e) { alleFluege = []; }
+  alleFluege.sort((a, b) => (b.start || 0) - (a.start || 0));
+  const ul = $("liste"); ul.innerHTML = "";
+  $("listeLeer").hidden = alleFluege.length > 0;
+  alleFluege.forEach(f => {
+    const a = f.werte || (f.werte = auswerten(f));
+    const li = document.createElement("li");
+    li.innerHTML = `<button><span class="datum">${datumText(f)}</span><span class="dauer">${dauerText(a.dauer)}</span>
+      <span class="klein">max. ${Math.round(a.max)} m · bestes Steigen ${zahl(a.best, 0.1)} m/s · ${Math.round(a.gewinn)} Hm</span></button>`;
+    li.querySelector("button").onclick = () => detailZeigen(f);
+    ul.appendChild(li);
+  });
+}
+
+// ---- Details mit Kurve ----
+let aktuellerFlug = null;
+function detailZeigen(f) {
+  aktuellerFlug = f;
+  const a = f.werte || auswerten(f);
+  $("flugUebersicht").hidden = true;
+  $("flugDetail").hidden = false;
+  $("dTitel").textContent = datumText(f);
+  const w = [
+    ["Dauer", dauerText(a.dauer), ""],
+    ["max. Höhe", Math.round(a.max) + " m", ""],
+    ["über Meer", f.nn ? Math.round(a.maxNN) + " m" : "–", ""],
+    ["Höhengewinn", Math.round(a.gewinn) + " m", ""],
+    ["bestes Steigen", "+" + zahl(a.best, 0.1) + " m/s", "up"],
+    ["stärkstes Sinken", zahl(a.sink, 0.1) + " m/s", "down"],
+  ];
+  $("dWerte").innerHTML = w.map(([l, v, c]) => `<div><span class="lbl">${l}</span><span class="w ${c}">${v}</span></div>`).join("");
+  kurveZeichnen(f, a);
+  bestaetigenBox($("flugLoeschenBox"), "Flug vom Handy löschen", "Diesen Flug wirklich vom Handy löschen?", "Ja, löschen", async () => {
+    await dbLoeschen(f.key); melden("Flug gelöscht"); zurueck();
+  });
+  window.scrollTo({ top: $("flugDetail").offsetTop - 20 });
+}
+function zurueck() { $("flugDetail").hidden = true; $("flugUebersicht").hidden = false; listeZeigen(); }
+$("zurueck").onclick = zurueck;
+window.addEventListener("resize", () => { if (aktuellerFlug && !$("flugDetail").hidden) kurveZeichnen(aktuellerFlug, aktuellerFlug.werte || auswerten(aktuellerFlug)); });
+
+function farbe(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function kurveZeichnen(f, a) {
+  const c = $("kurve"), dpr = window.devicePixelRatio || 1;
+  const B = c.clientWidth, H = c.clientHeight;
+  c.width = B * dpr; c.height = H * dpr;
+  const g = c.getContext("2d"); g.scale(dpr, dpr);
+  const h = f.hoehe.slice(a.ab), n = h.length;
+  if (n < 2) return;
+  const L = 50, R = 8, O = 10, U = 22, balkenH = 44;          // Raender, Balkenbereich
+  const kurveU = H - U - balkenH - 8;
+  let min = Math.min(...h), max = Math.max(...h);
+  if (max - min < 10) { max += 5; min -= 5; }
+  const pad = (max - min) * 0.08; min -= pad; max += pad;
+  const x = i => L + (B - L - R) * i / (n - 1);
+  const y = m => O + (kurveU - O) * (1 - (m - min) / (max - min));
+  const fg = farbe("--fg"), muted = farbe("--muted"), line = farbe("--line"), acc = farbe("--accent");
+  g.font = "12px " + farbe("--f-body"); g.textBaseline = "middle";
+  // Hoehen-Raster
+  const schritt = [5, 10, 20, 25, 50, 100, 200, 250, 500].find(s => (max - min) / s <= 5) || 1000;
+  g.strokeStyle = line; g.fillStyle = muted; g.lineWidth = 1; g.textAlign = "right";
+  for (let m = Math.ceil(min / schritt) * schritt; m <= max; m += schritt) {
+    g.beginPath(); g.moveTo(L, y(m)); g.lineTo(B - R, y(m)); g.stroke();
+    g.fillText(m + " m", L - 6, y(m));
+  }
+  // Zeit-Achse
+  const dauerMin = n / 60;
+  const tSchritt = [1, 2, 5, 10, 15, 30, 60, 120].find(s => dauerMin / s <= 6) || 240;
+  g.textAlign = "center"; g.textBaseline = "top";
+  for (let t = 0; t <= dauerMin; t += tSchritt) {
+    const xi = x(Math.min(n - 1, t * 60));
+    g.fillText(t >= 60 ? `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")} h` : t + " min", xi, H - U + 6);
+  }
+  // Flaeche + Linie
+  g.beginPath(); g.moveTo(x(0), y(h[0]));
+  for (let i = 1; i < n; i++) g.lineTo(x(i), y(h[i]));
+  g.lineWidth = 2; g.strokeStyle = acc; g.stroke();
+  g.lineTo(x(n - 1), kurveU); g.lineTo(x(0), kurveU); g.closePath();
+  g.globalAlpha = 0.12; g.fillStyle = acc; g.fill(); g.globalAlpha = 1;
+  // Steig-Balken (10 s gemittelt)
+  const mitte = H - U - balkenH / 2 - 4;
+  g.strokeStyle = line; g.beginPath(); g.moveTo(L, mitte); g.lineTo(B - R, mitte); g.stroke();
+  const gruen = farbe("--steigen"), rot = farbe("--sinken");
+  const breite = Math.max(1, (B - L - R) / n);
+  for (let i = 10; i < n; i += Math.max(1, Math.floor(n / (B - L - R)))) {
+    const v = (h[i] - h[i - 10]) / 10;
+    const hoehe = Math.max(-1, Math.min(1, v / 4)) * (balkenH / 2);
+    g.fillStyle = v >= 0 ? gruen : rot;
+    g.fillRect(x(i), mitte - Math.max(0, hoehe), Math.max(1, breite), Math.abs(hoehe));
+  }
+  g.fillStyle = muted; g.textAlign = "right"; g.textBaseline = "middle";
+  g.fillText("+4", L - 6, mitte - balkenH / 2 + 4); g.fillText("−4", L - 6, mitte + balkenH / 2 - 4);
+}
+
+// ---- Export ----
+function herunterladen(name, inhalt, typ) {
+  const url = URL.createObjectURL(new Blob([inhalt], { type: typ }));
+  const a = document.createElement("a"); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+function dateiName(f) {
+  const d = f.start ? new Date(f.start) : null;
+  return "sweef_" + (d ? d.toISOString().slice(0, 16).replace("T", "_").replace(":", "-") : f.key);
+}
+$("csv").onclick = () => {
+  const f = aktuellerFlug; if (!f) return;
+  const zeilen = ["Sekunde;Uhrzeit;Hoehe_m;Hoehe_ueber_Meer_m;Steigen_m_s"];
+  f.hoehe.forEach((m, i) => {
+    const t = f.start ? new Date(f.start + i * 1000).toLocaleTimeString("de-DE") : "";
+    const v = i > 0 ? m - f.hoehe[i - 1] : 0;
+    zeilen.push([i, t, m.toFixed(1), f.nn ? (m + f.nn).toFixed(1) : "", v.toFixed(1)].join(";").replace(/\./g, ","));
+  });
+  herunterladen(dateiName(f) + ".csv", zeilen.join("\n"), "text/csv");
+};
+$("sichern").onclick = async () => {
+  const alle = await dbAlle();
+  if (!alle.length) { melden("Noch keine Flüge zum Sichern"); return; }
+  alle.forEach(f => delete f.werte);
+  herunterladen("sweef_sicherung_" + new Date().toISOString().slice(0, 10) + ".json", JSON.stringify({ sweef: 1, fluege: alle }), "application/json");
+};
+$("laden_datei").onchange = async e => {
+  const datei = e.target.files[0]; if (!datei) return;
+  try {
+    const d = JSON.parse(await datei.text());
+    if (!d.fluege) throw new Error("keine Sweef-Sicherung");
+    for (const f of d.fluege) await dbSchreiben(f);
+    melden(d.fluege.length + " Flüge geladen");
+    listeZeigen();
+  } catch (err) { melden("Datei nicht lesbar: " + err.message); }
+  e.target.value = "";
+};
+
+// ================================================================
+// Fluege vom Vario holen
+// ================================================================
+let varioListe = [], varioInfo = null, laden = null;   // laden = laufende Uebertragung
+function datenEmpfangen(dv) {
+  const erstes = dv.getUint8(0);
+  if (erstes === 0x44 && laden) {                       // 'D' = Flugdaten
+    const ab = dv.getUint32(3, true);
+    for (let i = 0, p = 7; p + 1 < dv.byteLength; i++, p += 2) {
+      const idx = ab + i;
+      if (idx < laden.werte.length && laden.werte[idx] === 0xFFFF) laden.da++;
+      if (idx < laden.werte.length) laden.werte[idx] = dv.getUint16(p, true);
+    }
+    fortschritt();
+    return;
+  }
+  const text = dec.decode(dv);
+  const t = text.split(",");
+  if (t[0] === "L") {
+    varioListe.push({ nr: +t[1], zeit: +t[2], boot: +t[3], up: +t[4], anzahl: +t[5], nn: +t[6], vor: +t[7] });
+  } else if (t[0] === "LE") {
+    varioInfo = { boot: +t[1], up: +t[2], frei: +t[3] / 10, anzahl: +t[4], fliegt: t[5] === "1", empfangen: Date.now() };
+    if (laden && laden.listeOk) laden.listeOk();
+  } else if (t[0] === "E" && laden && laden.fertig) {
+    laden.fertig();
+  } else if (t[0] === "X") {
+    if (t[1] === "1") { melden("Flüge im Vario gelöscht"); varioListe = []; varioInfoZeigen(); }
+    else melden("Löschen geht nicht während eines Flugs");
+  }
+}
+function fortschritt() {
+  if (!laden) return;
+  const teil = laden.gesamt ? (laden.erledigt + laden.da) / laden.gesamt : 0;
+  $("ladeBalken").querySelector("i").style.width = Math.min(100, teil * 100) + "%";
+}
+function varioInfoZeigen(neu) {
+  if (!varioInfo) return;
+  const n = varioListe.length;
+  $("varioInfo").textContent = `Im Vario: ${n} ${n === 1 ? "Flug" : "Flüge"}` +
+    (neu !== undefined ? `, davon ${neu} neu.` : ".") + ` Speicher ${zahl(varioInfo.frei, 1)} % frei.`;
+  bestaetigenBox($("varioLoeschenBox"), "Flüge im Vario löschen", "Alle Flüge im Vario löschen? Auf dem Handy bleiben sie erhalten.", "Ja, im Vario löschen", async () => {
+    const vorhanden = new Set((await dbAlle()).map(f => f.key));
+    const fehlen = varioListe.filter(f => !vorhanden.has(schluessel(f)) && f.anzahl > 0).length;
+    if (fehlen) { melden(`Erst laden: ${fehlen} Flüge sind noch nicht auf dem Handy`); return; }
+    senden("fl_loeschen");
+  });
+}
+const schluessel = f => `${f.boot}-${f.up}-${f.nr}`;
+
+function listeHolen() {
+  return new Promise((ok, fehler) => {
+    varioListe = [];
+    const zeit = setTimeout(() => fehler(new Error("Vario antwortet nicht")), 8000);
+    laden = { listeOk: () => { clearTimeout(zeit); ok(); } };
+    senden("fl_liste");
+  });
+}
+function flugHolen(vf) {
+  return new Promise((ok, fehler) => {
+    laden.werte = new Uint16Array(vf.anzahl).fill(0xFFFF);
+    laden.da = 0;
+    let versuche = 0, uhr = null;
+    const weiter = () => {
+      clearTimeout(uhr);
+      const luecke = laden.werte.indexOf(0xFFFF);
+      if (luecke < 0) { ok(laden.werte); return; }
+      if (++versuche > 6) { fehler(new Error("Übertragung unvollständig")); return; }
+      uhr = setTimeout(weiter, 15000);                  // falls das Ende-Signal verloren geht
+      senden(`fl_hol=${vf.nr}@${luecke}`);
+    };
+    laden.fertig = () => setTimeout(weiter, 150);
+    weiter();
+  });
+}
+function startZeit(vf) {
+  if (vf.zeit > 0) return { start: vf.zeit * 1000, genau: true };
+  if (varioInfo && vf.boot === varioInfo.boot)            // seit dem Einschalten bekannt
+    return { start: varioInfo.empfangen - (varioInfo.up - vf.up) * 1000, genau: true };
+  return { start: 0, genau: false };
+}
+
+$("laden").onclick = async () => {
+  if (!befehlKanal) { melden("Erst verbinden"); return; }
+  $("laden").disabled = true;
+  $("ladeBalken").hidden = false;
+  try {
+    await listeHolen();
+    const vorhanden = new Set((await dbAlle()).map(f => f.key));
+    const neu = varioListe.filter(f => f.anzahl > 0 && !vorhanden.has(schluessel(f)));
+    varioInfoZeigen(neu.length);
+    laden.gesamt = neu.reduce((s, f) => s + f.anzahl, 0); laden.erledigt = 0;
+    for (const vf of neu) {
+      const roh = await flugHolen(vf);
+      const z = startZeit(vf);
+      const hoehe = Array.from(roh, w => Math.round((w - 32768)) / 10);
+      const flug = { key: schluessel(vf), nr: vf.nr, start: z.start, startGenau: z.genau, vor: vf.vor, nn: vf.nn, hoehe, geladen: Date.now() };
+      flug.werte = auswerten(flug);
+      await dbSchreiben(flug);
+      laden.erledigt += vf.anzahl; laden.da = 0; fortschritt();
+    }
+    melden(neu.length ? `${neu.length} ${neu.length === 1 ? "Flug" : "Flüge"} geladen` : "Keine neuen Flüge");
+    listeZeigen();
+  } catch (e) {
+    melden("Laden fehlgeschlagen: " + e.message);
+  } finally {
+    laden = null;
+    $("laden").disabled = !befehlKanal;
+    setTimeout(() => $("ladeBalken").hidden = true, 800);
+  }
+};
+
+// ================================================================
+// Verbinden
+// ================================================================
 $("verbinden").addEventListener("click", async () => {
   if (geraet && geraet.gatt.connected) { geraet.gatt.disconnect(); return; }
   if (!navigator.bluetooth) {
-    $("status").innerHTML = "<b>Dieser Browser kann kein Bluetooth.</b> Öffne die Seite in Chrome (Android, Windows, Mac) oder auf dem iPhone in der App „Bluefy“.";
+    $("status").innerHTML = "<b>Dieser Browser kann kein Bluetooth.</b> Öffne die Seite in Chrome (Android, Windows, Mac).";
     return;
   }
   try {
@@ -313,12 +721,20 @@ $("verbinden").addEventListener("click", async () => {
     const einst = await dienst.getCharacteristic(EINST);
     befehlKanal = await dienst.getCharacteristic(BEFEHL);
     const live = await dienst.getCharacteristic(LIVE);
-    const dec = new TextDecoder();
     einstellungenZeigen(dec.decode(await einst.readValue()));
     einst.addEventListener("characteristicvaluechanged", e => einstellungenZeigen(dec.decode(e.target.value)));
     await einst.startNotifications();
     live.addEventListener("characteristicvaluechanged", e => liveZeigen(dec.decode(e.target.value)));
     await live.startNotifications();
+    try {
+      const daten = await dienst.getCharacteristic(DATEN);
+      daten.addEventListener("characteristicvaluechanged", e => { const v = e.target.value; datenEmpfangen(new DataView(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength))); });
+      await daten.startNotifications();
+      $("laden").disabled = false;
+    } catch (e) {
+      $("varioInfo").textContent = "Dieses Vario-Programm kann noch keine Flüge speichern (ab Version 2 Teil 6).";
+    }
+    senden("zeit=" + Math.floor(Date.now() / 1000));       // Uhrzeit ans Vario
     $("status").innerHTML = "<b>Verbunden</b> mit " + (geraet.name || "Sweef") + ". Änderungen werden sofort im Vario gespeichert.";
     $("verbinden").textContent = "Trennen";
     $("einstellungen").classList.remove("gesperrt");
@@ -333,7 +749,13 @@ function getrennt() {
   $("verbinden").textContent = "Verbinden";
   $("einstellungen").classList.add("gesperrt");
   $("display").classList.add("aus");
+  $("laden").disabled = true;
 }
+
+// ---- Start ----
+try { if (localStorage.getItem("sweefReiter") === "fluege") reiter("fluege"); } catch (e) {}
+listeZeigen();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
 </html>

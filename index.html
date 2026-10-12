@@ -73,7 +73,7 @@ button:focus-visible, input:focus-visible, .knopf:focus-within { outline: 3px so
   display: grid; grid-template-columns: 1.3fr 1fr; gap: 6px 16px; align-items: end;
   font-variant-numeric: tabular-nums;
 }
-.display .steig { grid-row: span 3; }
+.display .steig { grid-row: span 4; }
 .display .gross { font: 700 3.4rem/1 var(--f-display); }
 .display .gross.up { color: #57d68f; }
 .display .gross.down { color: #ff8a7f; }
@@ -133,6 +133,23 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
 .melden { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: .92rem; max-width: calc(100% - 32px); z-index: 5; }
 .gesperrt { opacity: .55; pointer-events: none; }
+.pinbox { border-color: var(--accent); }
+.pinreihe { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 0 12px; }
+.pinreihe input, .feld input {
+  font: 600 1.1rem var(--f-display); padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); min-width: 0;
+}
+.pinreihe input { width: 8em; letter-spacing: .2em; text-align: center; }
+.feld { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+.feld:first-of-type { border-top: 0; }
+.feld label { font-weight: 500; }
+.namenreihe { display: flex; align-items: center; gap: 6px; }
+.namenreihe span { font: 600 1.1rem var(--f-display); color: var(--muted); }
+.namenreihe input { flex: 1; }
+.zeilen { display: grid; gap: 6px; max-width: 14em; }
+.zeilen input { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 1rem; }
+.suchen { display: flex; gap: 8px; }
+.suchen button { flex: 1; }
 @media (prefers-reduced-motion: no-preference) { button { transition: background .15s, transform .1s; } button:active { transform: scale(.98); } }
 @media (max-width: 380px) { .werte { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
@@ -153,7 +170,17 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
     <div><div class="lbl">Höhe</div><div class="wert" id="lh">– m</div></div>
     <div><div class="lbl">über Meer</div><div class="wert" id="lnn">– m</div></div>
     <div><div class="lbl">Flug</div><div class="wert" id="lfl">–</div></div>
+    <div><div class="lbl">Akku</div><div class="wert" id="lak">–</div></div>
   </div>
+
+  <section class="pinbox" id="pinBox" hidden>
+    <h2>PIN eingeben</h2>
+    <p class="hint">Dieses Vario ist mit einer PIN geschützt. Nach der ersten richtigen Eingabe merkt es sich dieses Handy.</p>
+    <div class="pinreihe">
+      <input id="pinEingabe" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="6" aria-label="PIN">
+      <button class="primary" id="pinOk">Entsperren</button>
+    </div>
+  </section>
 
   <div class="reiter" role="tablist">
     <button role="tab" id="tabVario" aria-selected="true" aria-controls="seiteVario">Einstellungen</button>
@@ -163,6 +190,14 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
   <!-- ===== Einstellungen ===== -->
   <div id="seiteVario" class="stapel" role="tabpanel">
     <div id="einstellungen" class="stapel gesperrt">
+      <section>
+        <h2>Vario suchen</h2>
+        <p class="hint">Das Vario piept 20 Sekunden lang laut, auch wenn es stumm geschaltet ist. Eine Taste am Vario beendet es.</p>
+        <div class="suchen knopfreihe">
+          <button class="primary" id="suchen">Vario piepen lassen</button>
+          <button id="suchenAus">Stopp</button>
+        </div>
+      </section>
       <section>
         <h2>Lautstärke</h2>
         <div class="stufen" id="stufen"></div>
@@ -178,6 +213,31 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
       </section>
       <section id="anzeige"><h2>Display</h2></section>
       <section id="flug"><h2>Flugerkennung und Ausschalten</h2></section>
+      <section id="vario">
+        <h2>Name und Begrüßung</h2>
+        <div class="feld">
+          <label for="nameZusatz">Name des Varios</label>
+          <div class="namenreihe"><span>Sweef-</span><input id="nameZusatz" maxlength="12" autocapitalize="off" spellcheck="false" placeholder="ID"></div>
+          <div class="note" id="nameHinweis">Unter diesem Namen findest du das Vario beim Verbinden. Erlaubt: Buchstaben, Ziffern, - und _. Leer = Geräte-ID.</div>
+          <div><button id="nameSpeichern">Name speichern</button></div>
+        </div>
+        <div class="feld">
+          <label>Begrüßung beim Einschalten</label>
+          <div class="note">Bis zu 4 Zeilen mit je 10 Zeichen, z. B. dein Name und deine Telefonnummer – falls das Vario mal verloren geht.</div>
+          <div class="zeilen" id="grussZeilen"></div>
+          <div><button id="grussSpeichern">Begrüßung speichern</button></div>
+        </div>
+      </section>
+      <section id="sicherheit">
+        <h2>PIN</h2>
+        <p class="hint" id="pinStatus">Keine PIN: jedes Handy kann sich verbinden.</p>
+        <div class="pinreihe">
+          <input id="pinNeu" type="password" inputmode="numeric" maxlength="6" placeholder="4–6 Ziffern" aria-label="Neue PIN">
+          <button id="pinSetzen">PIN festlegen</button>
+          <button id="pinAus" class="danger" hidden>PIN ausschalten</button>
+        </div>
+        <p class="note">Dieses Handy bleibt verbunden, andere Handys brauchen danach die PIN. PIN vergessen? Vario ausschalten, USB-Kabel anstecken (Ladeanzeige erscheint) und Taste 2 acht Sekunden halten.</p>
+      </section>
       <section>
         <h2>Zurücksetzen</h2>
         <div class="confirm" id="resetBox"></div>
@@ -239,6 +299,7 @@ const EINST  = "7e5e0002-b5a3-f393-e0a9-e50e24dcca9e";
 const BEFEHL = "7e5e0003-b5a3-f393-e0a9-e50e24dcca9e";
 const LIVE   = "7e5e0004-b5a3-f393-e0a9-e50e24dcca9e";
 const DATEN  = "7e5e0005-b5a3-f393-e0a9-e50e24dcca9e";
+const INFO   = "7e5e0006-b5a3-f393-e0a9-e50e24dcca9e";
 
 const FELDER = [
   ["se","ton","Steigton ab","m/s",0,1.5,0.05,"range","Ab diesem Steigen piept es."],
@@ -246,6 +307,8 @@ const FELDER = [
   ["f1","ton","Tonhöhe bei schwachem Steigen","Hz",300,2000,50,"range"],
   ["f2","ton","Tonhöhe bei starkem Steigen","Hz",800,4000,50,"range"],
   ["fk","ton","Tonhöhe Sinkalarm","Hz",200,1500,50,"range"],
+  ["nz","ton","Nullschieber","",0,1,1,"switch","Leises Ticken, wenn es kaum noch sinkt. Zeigt tragende Luft, bevor der Steigton kommt."],
+  ["nb","ton","Nullschieber ab","m/s",-1.5,0,0.05,"range","Ab diesem Wert tickt es, bis der Steigton einsetzt."],
   ["fs","ton","Ton-Skala","m/s",2,30,0.5,"range","Bei diesem Steigen ist der Ton am höchsten und schnellsten. Größer = ruhiger."],
   ["tl","ton","Takt bei schwachem Steigen","ms",300,2000,10,"range","Dauer von Piep + Pause."],
   ["ts","ton","Takt bei starkem Steigen","ms",100,1000,10,"range"],
@@ -255,6 +318,8 @@ const FELDER = [
   ["pf","anzeige","Pfeil anzeigen","",0,1,1,"switch"],
   ["ph","anzeige","Pfeil nur als Umriss","",0,1,1,"switch"],
   ["pt","anzeige","Pfeil-Tempo","",1,80,1,"range","Pixel pro Sekunde je 1 m/s."],
+  ["dr","anzeige","Display um 180° drehen","",0,1,1,"switch","Wenn du das Vario andersherum trägst."],
+  ["sb","flug","Am Boden stumm","",0,1,1,"switch","Der Ton startet erst, wenn der Start erkannt ist. Am Boden kurz eine Taste drücken = Ton sofort an. Beim Soaren knapp über Starthöhe evtl. die Werte darunter verkleinern."],
   ["fh","flug","Start bei Höhenänderung","m",1,30,0.5,"range"],
   ["fd","flug","… mindestens so lange","s",2,60,1,"range","Verhindert Fehlstarts durch Böen."],
   ["lr","flug","Landung nach Ruhe von","s",20,900,10,"range","So lange ruhig auf gleicher Höhe = gelandet."],
@@ -263,6 +328,7 @@ const FELDER = [
 const TESTS = [0.3, 0.8, 1.5, 3, 5, -3];
 
 let befehlKanal = null, geraet = null, warteschlange = Promise.resolve();
+let einstKanal = null, varioInfoDaten = {}, entsperrt = false, absichtlichGetrennt = false;
 const $ = id => document.getElementById(id);
 const dec = new TextDecoder();
 
@@ -348,14 +414,65 @@ TESTS.forEach(t => {
   b.addEventListener("click", () => senden("test=" + t, "Teste " + zahl(t, 0.1) + " m/s"));
   $("tests").appendChild(b);
 });
+// ---- Name, Begruessung, PIN, Vario suchen ----
+for (let i = 0; i < 4; i++) {
+  const inp = document.createElement("input");
+  inp.maxLength = 10; inp.id = "gruss" + i;
+  inp.setAttribute("aria-label", "Begrüßung Zeile " + (i + 1));
+  $("grussZeilen").appendChild(inp);
+}
+const sauber = t => t.replace(/[;|]/g, "").trim();
+$("grussSpeichern").onclick = () => {
+  const zeilen = [0, 1, 2, 3].map(i => sauber($("gruss" + i).value).slice(0, 10));
+  while (zeilen.length && !zeilen[zeilen.length - 1]) zeilen.pop();
+  senden("gt=" + zeilen.join("|"), "Begrüßung gespeichert");
+};
+$("nameSpeichern").onclick = () => {
+  const n = $("nameZusatz").value.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 12);
+  $("nameZusatz").value = n;
+  senden("nm=" + n, "Name gespeichert – gilt beim nächsten Verbinden");
+};
+$("pinSetzen").onclick = () => {
+  const pin = $("pinNeu").value.trim();
+  if (!/^\d{4,6}$/.test(pin)) { melden("Die PIN muss 4 bis 6 Ziffern haben"); return; }
+  senden("pin_neu=" + pin);
+  $("pinNeu").value = "";
+};
+$("pinAus").onclick = () => senden("pin_neu=");
+$("suchen").onclick = () => senden("suchen", "Vario piept …");
+$("suchenAus").onclick = () => senden("suchen_aus", "Ton aus");
+
+function infoZeigen(text) {
+  const d = zerlegen(text);
+  varioInfoDaten = Object.assign(varioInfoDaten, d);
+  if (document.activeElement !== $("nameZusatz")) $("nameZusatz").value = d.zs || "";
+  $("nameZusatz").placeholder = d.id || "ID";
+  if (d.gt !== undefined) {
+    const z = d.gt.split("|");
+    for (let i = 0; i < 4; i++) if (document.activeElement !== $("gruss" + i)) $("gruss" + i).value = z[i] || "";
+  }
+  const an = d.pin === "1";
+  $("pinStatus").textContent = an ? "PIN ist eingeschaltet. Neue PIN eingeben, um sie zu ändern." : "Keine PIN: jedes Handy kann sich verbinden.";
+  $("pinAus").hidden = !an;
+  $("pinSetzen").textContent = an ? "PIN ändern" : "PIN festlegen";
+}
+const schluesselName = () => "sweefSchluessel_" + (varioInfoDaten.id || "x");
+function schluesselLesen() { try { return localStorage.getItem(schluesselName()); } catch (e) { return null; } }
+function schluesselMerken(k) { try { localStorage.setItem(schluesselName(), k); } catch (e) {} }
+function schluesselVergessen() { try { localStorage.removeItem(schluesselName()); } catch (e) {} }
+
 bestaetigenBox($("resetBox"), "Alle Einstellungen zurücksetzen", "Wirklich alles auf die Grundeinstellung?", "Ja, zurücksetzen", () => senden("reset", "Zurückgesetzt"));
 
 function zerlegen(text) {
   const daten = {};
-  text.split(";").forEach(teil => { const [k, w] = teil.split("="); if (k && w !== undefined) daten[k.trim()] = w.trim(); });
+  text.split(";").forEach(teil => {
+    const i = teil.indexOf("=");
+    if (i > 0) daten[teil.slice(0, i).trim()] = teil.slice(i + 1);
+  });
   return daten;
 }
 function einstellungenZeigen(text) {
+  if (text.startsWith("lock=")) return;            // gesperrt: noch keine Werte
   const d = zerlegen(text);
   FELDER.forEach(([k, , , einheit, , , schritt, art]) => {
     if (!(k in d)) return;
@@ -378,6 +495,12 @@ function liveZeigen(text) {
   const t = parseInt(d.t || "0");
   $("lfl").textContent = d.fl === "1" ? `fliegt · ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}` : "am Boden";
   if ("ls" in d) stufeZeigen(d.ls);
+  if ("ak" in d) {
+    const ak = parseInt(d.ak);
+    $("lak").textContent = d.ld === "1" ? `lädt · ${ak} %` : `${ak} %`;
+    $("lak").style.color = ak <= 10 && d.ld !== "1" ? "#ff8a7f" : "";
+  }
+  if (d.fl !== "1" && d.gb === "1") $("lfl").textContent = "am Boden · stumm";
 }
 function senden(text, meldung) {
   if (!befehlKanal) { melden("Erst verbinden"); return Promise.resolve(); }
@@ -386,6 +509,52 @@ function senden(text, meldung) {
     .then(() => meldung && melden(meldung))
     .catch(e => melden("Senden fehlgeschlagen: " + e.message));
   return warteschlange;
+}
+
+// ================================================================
+// PIN / Entsperren
+// ================================================================
+let schluesselVersucht = false;
+function pinFragen(text) {
+  $("pinBox").hidden = false;
+  if (text) melden(text);
+  $("status").innerHTML = "<b>Verbunden</b>, aber gesperrt. Bitte PIN eingeben.";
+  setTimeout(() => $("pinEingabe").focus(), 50);
+}
+$("pinOk").onclick = () => {
+  const pin = $("pinEingabe").value.trim();
+  if (!pin) return;
+  senden("pin=" + pin);
+};
+$("pinEingabe").addEventListener("keydown", e => { if (e.key === "Enter") $("pinOk").click(); });
+
+async function entsperren() {
+  entsperrt = true;
+  $("pinBox").hidden = true;
+  $("pinEingabe").value = "";
+  $("einstellungen").classList.remove("gesperrt");
+  $("display").classList.remove("aus");
+  if (datenKanalDa) $("laden").disabled = false;
+  $("status").innerHTML = "<b>Verbunden</b> mit " + (varioInfoDaten.nm || geraet.name || "Sweef") + ". Änderungen werden sofort im Vario gespeichert.";
+  try { if (einstKanal) einstellungenZeigen(dec.decode(await einstKanal.readValue())); } catch (e) {}
+}
+
+// Antworten des Varios auf PIN, Name usw. (kommen ueber den Daten-Kanal)
+function antwortVerarbeiten(t) {
+  if (t[0] === "A") {
+    if (t[1] === "1") { entsperren(); return true; }
+    if (t[1] === "2") { pinFragen("Zu viele Versuche – kurz warten"); return true; }
+    if (schluesselVersucht) { schluesselVersucht = false; schluesselVergessen(); pinFragen(); }
+    else pinFragen("PIN falsch");
+    return true;
+  }
+  if (t[0] === "K") { schluesselMerken(t[1]); return true; }
+  if (t[0] === "P") {
+    melden(t[1] === "1" ? "PIN gespeichert" : t[1] === "0" ? "PIN ausgeschaltet" : "PIN ungültig");
+    if (t[1] === "0") schluesselVergessen();
+    return true;
+  }
+  return t[0] === "N" || t[0] === "G";
 }
 
 // ================================================================
@@ -610,6 +779,7 @@ function datenEmpfangen(dv) {
   }
   const text = dec.decode(dv);
   const t = text.split(",");
+  if (antwortVerarbeiten(t)) return;
   if (t[0] === "L") {
     varioListe.push({ nr: +t[1], zeit: +t[2], boot: +t[3], up: +t[4], anzahl: +t[5], nn: +t[6], vor: +t[7] });
   } else if (t[0] === "LE") {
@@ -706,51 +876,97 @@ $("laden").onclick = async () => {
 // ================================================================
 // Verbinden
 // ================================================================
+let datenKanalDa = false;
+// feste Funktionen, damit sie beim Wiederverbinden nicht doppelt angemeldet werden
+const beiEinst = e => einstellungenZeigen(dec.decode(e.target.value));
+const beiLive  = e => liveZeigen(dec.decode(e.target.value));
+const beiInfo  = e => infoZeigen(dec.decode(e.target.value));
+const beiDaten = e => { const v = e.target.value; datenEmpfangen(new DataView(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength))); };
 $("verbinden").addEventListener("click", async () => {
-  if (geraet && geraet.gatt.connected) { geraet.gatt.disconnect(); return; }
+  if (geraet && geraet.gatt.connected) { absichtlichGetrennt = true; geraet.gatt.disconnect(); return; }
   if (!navigator.bluetooth) {
     $("status").innerHTML = "<b>Dieser Browser kann kein Bluetooth.</b> Öffne die Seite in Chrome (Android, Windows, Mac).";
     return;
   }
   try {
     $("status").textContent = "Suche Sweef …";
-    geraet = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "Sweef" }], optionalServices: [DIENST] });
+    const neu = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "Sweef" }], optionalServices: [DIENST] });
+    if (geraet && geraet !== neu) geraet.removeEventListener("gattserverdisconnected", getrennt);
+    geraet = neu;
     geraet.addEventListener("gattserverdisconnected", getrennt);
-    $("status").textContent = "Verbinde …";
-    const server = await geraet.gatt.connect();
-    const dienst = await server.getPrimaryService(DIENST);
-    const einst = await dienst.getCharacteristic(EINST);
-    befehlKanal = await dienst.getCharacteristic(BEFEHL);
-    const live = await dienst.getCharacteristic(LIVE);
-    einstellungenZeigen(dec.decode(await einst.readValue()));
-    einst.addEventListener("characteristicvaluechanged", e => einstellungenZeigen(dec.decode(e.target.value)));
-    await einst.startNotifications();
-    live.addEventListener("characteristicvaluechanged", e => liveZeigen(dec.decode(e.target.value)));
-    await live.startNotifications();
-    try {
-      const daten = await dienst.getCharacteristic(DATEN);
-      daten.addEventListener("characteristicvaluechanged", e => { const v = e.target.value; datenEmpfangen(new DataView(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength))); });
-      await daten.startNotifications();
-      $("laden").disabled = false;
-    } catch (e) {
-      $("varioInfo").textContent = "Dieses Vario-Programm kann noch keine Flüge speichern (ab Version 2 Teil 6).";
-    }
-    senden("zeit=" + Math.floor(Date.now() / 1000));       // Uhrzeit ans Vario
-    $("status").innerHTML = "<b>Verbunden</b> mit " + (geraet.name || "Sweef") + ". Änderungen werden sofort im Vario gespeichert.";
-    $("verbinden").textContent = "Trennen";
-    $("einstellungen").classList.remove("gesperrt");
-    $("display").classList.remove("aus");
+    absichtlichGetrennt = false;
+    await einrichten();
   } catch (e) {
     $("status").textContent = e.name === "NotFoundError" ? "Kein Gerät ausgewählt." : "Verbindung fehlgeschlagen: " + e.message;
   }
 });
+
+// Verbindung aufbauen und alle Kanaele einrichten (auch beim Wiederverbinden)
+async function einrichten() {
+  $("status").textContent = "Verbinde mit " + (geraet.name || "Sweef") + " …";
+  entsperrt = false; schluesselVersucht = false; varioInfoDaten = {};
+  const server = await geraet.gatt.connect();
+  const dienst = await server.getPrimaryService(DIENST);
+  einstKanal = await dienst.getCharacteristic(EINST);
+  befehlKanal = await dienst.getCharacteristic(BEFEHL);
+  warteschlange = Promise.resolve();
+  const live = await dienst.getCharacteristic(LIVE);
+  einstKanal.addEventListener("characteristicvaluechanged", beiEinst);
+  await einstKanal.startNotifications();
+  live.addEventListener("characteristicvaluechanged", beiLive);
+  await live.startNotifications();
+  datenKanalDa = false;
+  try {
+    const daten = await dienst.getCharacteristic(DATEN);
+    daten.addEventListener("characteristicvaluechanged", beiDaten);
+    await daten.startNotifications();
+    datenKanalDa = true;
+  } catch (e) {
+    $("varioInfo").textContent = "Dieses Vario-Programm kann noch keine Flüge speichern (ab Version 2 Teil 6).";
+  }
+  let info = null;
+  try {
+    const infoKanal = await dienst.getCharacteristic(INFO);
+    infoKanal.addEventListener("characteristicvaluechanged", beiInfo);
+    await infoKanal.startNotifications();
+    infoZeigen(dec.decode(await infoKanal.readValue()));
+    info = varioInfoDaten;
+    $("vario").hidden = false; $("sicherheit").hidden = false;
+  } catch (e) {                                      // altes Vario-Programm ohne Info
+    $("vario").hidden = true; $("sicherheit").hidden = true;
+  }
+  senden("zeit=" + Math.floor(Date.now() / 1000));       // Uhrzeit ans Vario
+  $("verbinden").textContent = "Trennen";
+  if (info && info.pin === "1" && info.ok !== "1") {      // PIN noetig
+    const k = schluesselLesen();
+    if (k) { schluesselVersucht = true; senden("auth=" + k); $("status").textContent = "Entsperre …"; }
+    else pinFragen();
+  } else {
+    await entsperren();
+  }
+}
+
 function getrennt() {
-  befehlKanal = null;
-  $("status").textContent = "Verbindung getrennt.";
+  befehlKanal = null; einstKanal = null; entsperrt = false;
   $("verbinden").textContent = "Verbinden";
   $("einstellungen").classList.add("gesperrt");
   $("display").classList.add("aus");
   $("laden").disabled = true;
+  $("pinBox").hidden = true;
+  if (absichtlichGetrennt) { $("status").textContent = "Verbindung getrennt."; return; }
+  wiederverbinden();
+}
+
+// Verbindung abgerissen (zu weit weg, Vario aus): 2 Minuten lang neu versuchen
+async function wiederverbinden() {
+  for (let versuch = 1; versuch <= 40; versuch++) {
+    if (absichtlichGetrennt || !geraet) return;
+    $("status").textContent = `Verbindung verloren – verbinde neu (${versuch}) …`;
+    await new Promise(r => setTimeout(r, 3000));
+    if (absichtlichGetrennt || geraet.gatt.connected) return;
+    try { await einrichten(); return; } catch (e) {}
+  }
+  $("status").textContent = "Verbindung verloren. Vario einschalten und „Verbinden“ tippen.";
 }
 
 // ---- Start ----

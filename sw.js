@@ -1,6 +1,6 @@
 // Sweef: macht die Seite offline-faehig.
 // Bei jeder neuen Version der Seite hier die Nummer erhoehen.
-const VERSION = "sweef-4";
+const VERSION = "sweef-5";
 const DATEIEN = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", e => {

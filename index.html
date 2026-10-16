@@ -150,6 +150,23 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
 .zeilen input { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 1rem; }
 .suchen { display: flex; gap: 8px; }
 .suchen button { flex: 1; }
+/* Startplaetze und Profile */
+select, .feld input[type=number] {
+  font: 600 1.05rem var(--f-body); padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg); color: var(--fg); min-width: 0; min-height: 44px;
+}
+.spreihe { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spreihe select, .spreihe input:not([type=checkbox]) { flex: 1 1 160px; }
+.check { display: flex; gap: 10px; align-items: center; font-weight: 400; font-size: .95rem; }
+.check input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.vorschlag { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; }
+.vorschlag b { font: 600 1.1rem var(--f-display); }
+.splist { list-style: none; margin: 0; padding: 0; }
+.splist li { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.splist li:first-child { border-top: 0; }
+.splist .klein { font-size: .82rem; color: var(--muted); }
+.splist button { min-height: 38px; padding: 6px 10px; font-size: .9rem; }
+details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height: 44px; display: flex; align-items: center; }
 @media (prefers-reduced-motion: no-preference) { button { transition: background .15s, transform .1s; } button:active { transform: scale(.98); } }
 @media (max-width: 380px) { .werte { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
@@ -189,6 +206,66 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
 
   <!-- ===== Einstellungen ===== -->
   <div id="seiteVario" class="stapel" role="tabpanel">
+    <section id="startplatz">
+      <h2>Startplatz</h2>
+      <p class="hint">Startplätze mit ihrer Höhe über Meer werden hier auf dem Handy gespeichert. Am Startplatz wählen und „Übernehmen“ tippen – dann zeigt das Vario die richtige Höhe über Meer.</p>
+      <div class="vorschlag" id="spVorschlag" hidden></div>
+      <div class="feld">
+        <label for="spWahl">Gespeicherter Startplatz</label>
+        <div class="spreihe">
+          <select id="spWahl"></select>
+          <button class="primary" id="spUebernehmen">Übernehmen</button>
+        </div>
+        <label class="check"><input type="checkbox" id="spNullen"> Höhe am Vario jetzt auf 0 setzen (ich stehe am Startplatz)</label>
+        <div class="knopfreihe">
+          <button id="spOrt">Nächsten Startplatz per GPS suchen</button>
+          <button id="spNeuKnopf">Neuer Startplatz</button>
+        </div>
+        <div class="note" id="spGpsInfo"></div>
+      </div>
+      <div class="feld" id="spNeu" hidden>
+        <label for="spName" id="spNeuTitel">Neuer Startplatz</label>
+        <input id="spName" maxlength="30" placeholder="Name, z. B. Wilderness" autocomplete="off">
+        <div class="spreihe">
+          <input type="number" id="spHoehe" inputmode="decimal" step="1" min="-100" max="5000" placeholder="Höhe über Meer" aria-label="Höhe über Meer in Metern">
+          <span>m über Meer</span>
+        </div>
+        <label class="check"><input type="checkbox" id="spMitOrt"> Standort mitspeichern (für die GPS-Suche)</label>
+        <div class="note" id="spOrtInfo">Kein Standort.</div>
+        <div class="knopfreihe">
+          <button id="spOrtHolen">Standort holen</button>
+          <button class="primary" id="spSpeichern">Speichern</button>
+          <button id="spAbbrechen">Abbrechen</button>
+        </div>
+      </div>
+      <details id="spVerwalten">
+        <summary>Startplätze verwalten</summary>
+        <ul class="splist" id="spListe"></ul>
+      </details>
+    </section>
+
+    <section id="profile">
+      <h2>Profile</h2>
+      <p class="hint">Speichert alle Einstellungen für Ton, Lautstärke, Display und Flugerkennung unter einem Namen, z. B. „Soaring“ oder „Thermik“. Startplatzhöhe und QNH gehören nicht dazu.</p>
+      <div class="feld">
+        <label for="prWahl">Gespeichertes Profil</label>
+        <div class="spreihe">
+          <select id="prWahl"></select>
+          <button class="primary" id="prLaden">Aufs Vario laden</button>
+        </div>
+        <div class="note" id="prInfo"></div>
+        <div class="confirm" id="prLoeschenBox"></div>
+      </div>
+      <div class="feld">
+        <label for="prName">Aktuelle Einstellungen des Varios speichern als</label>
+        <div class="spreihe">
+          <input id="prName" maxlength="30" placeholder="Name des Profils" autocomplete="off">
+          <button id="prSpeichern">Speichern</button>
+        </div>
+        <div class="note">Gleicher Name = altes Profil wird überschrieben.</div>
+      </div>
+    </section>
+
     <div id="einstellungen" class="stapel gesperrt">
       <section>
         <h2>Vario suchen</h2>
@@ -209,7 +286,7 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
       </section>
       <section id="ton"><h2>Piepton</h2></section>
       <section id="hoehe"><h2>Höhe</h2>
-        <p class="hint">Für eine genaue Höhe über Meer entweder die Höhe des Startplatzes eintragen und dort die Höhe nullen, oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
+        <p class="hint">Für eine genaue Höhe über Meer entweder oben einen Startplatz übernehmen (oder die Höhe hier eintragen und am Startplatz nullen), oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
       </section>
       <section id="anzeige"><h2>Display</h2></section>
       <section id="flug"><h2>Flugerkennung und Ausschalten</h2></section>
@@ -278,7 +355,7 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
 
       <section>
         <h2>Sichern</h2>
-        <p class="hint">Die Flüge liegen im Speicher dieser Seite auf dem Handy. Wenn du in Chrome die Website-Daten löschst, sind sie weg. Mach deshalb ab und zu eine Sicherung.</p>
+        <p class="hint">Flüge, Startplätze und Profile liegen im Speicher dieser Seite auf dem Handy. Wenn du in Chrome die Website-Daten löschst, sind sie weg. Mach deshalb ab und zu eine Sicherung.</p>
         <div class="knopfreihe">
           <button id="sichern">Sicherung speichern</button>
           <label class="knopf" for="laden_datei">Sicherung laden<input type="file" id="laden_datei" accept=".json,application/json" hidden></label>
@@ -510,6 +587,217 @@ function senden(text, meldung) {
     .catch(e => melden("Senden fehlgeschlagen: " + e.message));
   return warteschlange;
 }
+
+// ================================================================
+// Startplaetze (auf dem Handy gespeichert)
+// ================================================================
+// Ein Startplatz: { id, name, hoehe (m ueber Meer), lat, lon }  (lat/lon optional)
+const SP_KEY = "sweefStartplaetze", PR_KEY = "sweefProfile";
+function speicherLesen(key) { try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch (e) { return []; } }
+function speicherSchreiben(key, liste) {
+  try { localStorage.setItem(key, JSON.stringify(liste)); return true; }
+  catch (e) { melden("Speichern auf dem Handy nicht möglich"); return false; }
+}
+let startplaetze = speicherLesen(SP_KEY);
+let spBearbeiten = null, spOrtNeu = null;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const kmText = km => km < 1 ? Math.round(km * 1000) + " m" : zahl(km, km < 10 ? 0.1 : 1) + " km";
+
+function entfernungKm(a, b) {                       // Haversine
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
+function spZeigen(waehlen) {
+  startplaetze.sort((a, b) => a.name.localeCompare(b.name, "de"));
+  const sel = $("spWahl"), alt = waehlen || sel.value;
+  sel.innerHTML = startplaetze.length
+    ? startplaetze.map(p => `<option value="${p.id}">${esc(p.name)} · ${Math.round(p.hoehe)} m</option>`).join("")
+    : `<option value="">– noch keine Startplätze –</option>`;
+  if (alt && startplaetze.some(p => p.id === alt)) sel.value = alt;
+  $("spUebernehmen").disabled = !startplaetze.length;
+  const ul = $("spListe"); ul.innerHTML = "";
+  if (!startplaetze.length) ul.innerHTML = `<li><span class="klein">Noch keine Startplätze gespeichert.</span></li>`;
+  startplaetze.forEach(p => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span>${esc(p.name)} · ${Math.round(p.hoehe)} m<br><span class="klein">${p.lat != null ? "mit Standort" : "ohne Standort"}</span></span>
+      <button class="aendern">Ändern</button><button class="danger loeschen">Löschen</button>`;
+    li.querySelector(".aendern").onclick = () => spFormular(p);
+    li.querySelector(".loeschen").onclick = e => {
+      const b = e.currentTarget;
+      if (b.dataset.sicher) {
+        startplaetze = startplaetze.filter(x => x.id !== p.id);
+        speicherSchreiben(SP_KEY, startplaetze); spZeigen(); melden("Startplatz gelöscht");
+      } else { b.dataset.sicher = "1"; b.textContent = "Wirklich?"; setTimeout(() => { if (b.isConnected) { delete b.dataset.sicher; b.textContent = "Löschen"; } }, 3000); }
+    };
+    ul.appendChild(li);
+  });
+}
+
+function spOrtText() {
+  $("spOrtInfo").textContent = spOrtNeu
+    ? `Standort: ${spOrtNeu.lat.toFixed(5)}, ${spOrtNeu.lon.toFixed(5)}` + (spOrtNeu.genau ? ` (± ${Math.round(spOrtNeu.genau)} m)` : "")
+    : "Kein Standort.";
+  $("spMitOrt").checked = !!spOrtNeu;
+  $("spMitOrt").disabled = !spOrtNeu;
+}
+function spFormular(p, ort) {
+  spBearbeiten = p ? p.id : null;
+  $("spNeuTitel").textContent = p ? "Startplatz ändern" : "Neuer Startplatz";
+  $("spName").value = p ? p.name : "";
+  $("spHoehe").value = p ? Math.round(p.hoehe) : (ort && ort.hoehe != null ? Math.round(ort.hoehe) : "");
+  spOrtNeu = ort ? ort : (p && p.lat != null ? { lat: p.lat, lon: p.lon } : null);
+  spOrtText();
+  $("spNeu").hidden = false;
+  if (ort && ort.hoehe != null) $("spGpsInfo").textContent = "Die Höhe kommt vom GPS und ist oft 10–30 m ungenau – bitte prüfen (z. B. Karte oder Startplatz-Schild).";
+  $("spName").focus();
+}
+$("spNeuKnopf").onclick = () => spFormular(null);
+$("spAbbrechen").onclick = () => { $("spNeu").hidden = true; spBearbeiten = null; };
+$("spSpeichern").onclick = () => {
+  const name = $("spName").value.trim().slice(0, 30);
+  const hoehe = parseFloat(String($("spHoehe").value).replace(",", "."));
+  if (!name) { melden("Bitte einen Namen eingeben"); return; }
+  if (!isFinite(hoehe) || hoehe < -100 || hoehe > 5000) { melden("Höhe zwischen -100 und 5000 m eingeben"); return; }
+  const ort = $("spMitOrt").checked && spOrtNeu ? { lat: spOrtNeu.lat, lon: spOrtNeu.lon } : { lat: null, lon: null };
+  if (spBearbeiten) {
+    const p = startplaetze.find(x => x.id === spBearbeiten);
+    Object.assign(p, { name, hoehe }, ort);
+  } else {
+    spBearbeiten = "sp" + Date.now().toString(36);
+    startplaetze.push(Object.assign({ id: spBearbeiten, name, hoehe }, ort));
+  }
+  if (speicherSchreiben(SP_KEY, startplaetze)) melden("Startplatz gespeichert");
+  spZeigen(spBearbeiten);
+  $("spNeu").hidden = true; spBearbeiten = null;
+};
+
+function standortHolen() {
+  return new Promise((ok, fehler) => {
+    if (!navigator.geolocation) { fehler(new Error("Dieses Handy liefert keinen Standort")); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => ok({ lat: pos.coords.latitude, lon: pos.coords.longitude, genau: pos.coords.accuracy,
+                  hoehe: pos.coords.altitude != null ? pos.coords.altitude : null }),
+      e => fehler(new Error(e.code === 1 ? "Standort nicht erlaubt (in den Chrome-Einstellungen freigeben)" :
+                            e.code === 3 ? "Kein GPS-Empfang – kurz warten und nochmal versuchen" : "Standort nicht verfügbar")),
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+  });
+}
+$("spOrtHolen").onclick = async () => {
+  $("spOrtInfo").textContent = "Suche Standort …";
+  try { const o = await standortHolen(); spOrtNeu = o; spOrtText();
+        if ($("spHoehe").value === "" && o.hoehe != null) $("spHoehe").value = Math.round(o.hoehe); }
+  catch (e) { spOrtText(); melden(e.message); }
+};
+
+// Naechsten Startplatz suchen; still = ohne Fehlermeldungen (beim Start der App)
+async function naechsterStartplatz(still) {
+  const mitOrt = startplaetze.filter(p => p.lat != null);
+  if (!still) $("spGpsInfo").textContent = "Suche Standort …";
+  let ort;
+  try { ort = await standortHolen(); }
+  catch (e) { if (!still) { $("spGpsInfo").textContent = ""; melden(e.message); } return; }
+  const box = $("spVorschlag");
+  let best = null, bestKm = Infinity;
+  mitOrt.forEach(p => { const km = entfernungKm(ort, p); if (km < bestKm) { bestKm = km; best = p; } });
+  $("spGpsInfo").textContent = "";
+  if (best && bestKm <= 2) {
+    $("spWahl").value = best.id;
+    $("spNullen").checked = bestKm <= 0.5;
+    box.innerHTML = `<span>Nächster Startplatz</span><b>${esc(best.name)} · ${Math.round(best.hoehe)} m über Meer</b>
+      <span class="note">${kmText(bestKm)} entfernt${bestKm <= 0.5 ? " – du bist am Startplatz" : ""}</span>
+      <div class="knopfreihe"><button class="primary" id="spVorschlagOk">Übernehmen</button></div>`;
+    box.hidden = false;
+    $("spVorschlagOk").onclick = () => spUebernehmen();
+  } else if (!still) {
+    box.innerHTML = `<span>${best ? `Kein Startplatz in der Nähe (nächster: ${esc(best.name)}, ${kmText(bestKm)}).` : "Noch kein Startplatz mit Standort gespeichert."}</span>
+      <div class="knopfreihe"><button class="primary" id="spHierNeu">Hier neuen Startplatz anlegen</button></div>`;
+    box.hidden = false;
+    $("spHierNeu").onclick = () => { box.hidden = true; spFormular(null, ort); };
+  }
+}
+$("spOrt").onclick = () => naechsterStartplatz(false);
+
+async function spUebernehmen() {
+  const p = startplaetze.find(x => x.id === $("spWahl").value);
+  if (!p) return;
+  if (!befehlKanal) { melden("Erst mit dem Vario verbinden"); return; }
+  const nullen = $("spNullen").checked;
+  await senden(`nn=${Math.round(p.hoehe)}` + (nullen ? ";null" : ""), `${p.name}: ${Math.round(p.hoehe)} m übernommen` + (nullen ? ", Höhe genullt" : ""));
+  $("spVorschlag").hidden = true;
+}
+$("spUebernehmen").onclick = spUebernehmen;
+$("spWahl").onchange = () => { $("spNullen").checked = false; };
+spZeigen();
+
+// ================================================================
+// Profile (komplette Einstellungen unter einem Namen)
+// ================================================================
+// Ein Profil: { name, werte: { kuerzel: wert }, zeit }
+const PROFIL_OHNE = ["nn", "qn"];                  // ortsabhaengig, nicht im Profil
+let profile = speicherLesen(PR_KEY);
+function prZeigen(waehlen) {
+  profile.sort((a, b) => a.name.localeCompare(b.name, "de"));
+  const sel = $("prWahl"), alt = waehlen || sel.value;
+  sel.innerHTML = profile.length
+    ? profile.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join("")
+    : `<option value="">– noch keine Profile –</option>`;
+  const idx = profile.findIndex(p => p.name === alt);
+  if (idx >= 0) sel.value = String(idx);
+  $("prLaden").disabled = !profile.length;
+  prInfo();
+}
+function prAktuell() { return profile[parseInt($("prWahl").value)]; }
+function prInfo() {
+  const p = prAktuell();
+  $("prLoeschenBox").innerHTML = "";
+  if (!p) { $("prInfo").textContent = ""; return; }
+  const w = p.werte, f = (k, s) => w[k] !== undefined ? zahl(w[k], s) : "–";
+  $("prInfo").textContent = `Steigton ab ${f("se", 0.05)} m/s · Ton ${w.f1 ?? "–"}–${w.f2 ?? "–"} Hz · Lautstärke ${w.ls ?? "–"}` +
+    (p.zeit ? ` · gespeichert ${new Date(p.zeit).toLocaleDateString("de-DE")}` : "");
+  bestaetigenBox($("prLoeschenBox"), "Profil löschen", `Profil „${esc(p.name)}“ löschen?`, "Ja, löschen", () => {
+    profile = profile.filter(x => x !== p); speicherSchreiben(PR_KEY, profile); melden("Profil gelöscht");
+    setTimeout(() => prZeigen(), 0);              // erst nach dem Zuruecksetzen der Box neu aufbauen
+  });
+}
+$("prWahl").onchange = prInfo;
+
+$("prSpeichern").onclick = async () => {
+  const name = $("prName").value.trim().slice(0, 30);
+  if (!name) { melden("Bitte einen Namen für das Profil eingeben"); return; }
+  if (!einstKanal || !entsperrt) { melden("Erst mit dem Vario verbinden"); return; }
+  let d;
+  try { d = zerlegen(dec.decode(await einstKanal.readValue())); } catch (e) { melden("Einstellungen nicht lesbar"); return; }
+  const werte = {};
+  FELDER.forEach(([k]) => { if (k in d && !PROFIL_OHNE.includes(k)) werte[k] = parseFloat(d[k]); });
+  if ("ls" in d) werte.ls = parseInt(d.ls);
+  if (!Object.keys(werte).length) { melden("Keine Einstellungen empfangen"); return; }
+  const alt = profile.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (alt) Object.assign(alt, { werte, zeit: Date.now() });
+  else profile.push({ name, werte, zeit: Date.now() });
+  if (speicherSchreiben(PR_KEY, profile)) melden(`Profil „${name}“ gespeichert`);
+  $("prName").value = "";
+  prZeigen(name);
+};
+
+$("prLaden").onclick = async () => {
+  const p = prAktuell();
+  if (!p) return;
+  if (!befehlKanal || !entsperrt) { melden("Erst mit dem Vario verbinden"); return; }
+  // in kleinen Paketen senden, damit jede Bluetooth-Nachricht kurz bleibt
+  const teile = Object.entries(p.werte).filter(([k]) => !PROFIL_OHNE.includes(k)).map(([k, v]) => `${k}=${v}`);
+  let paket = "";
+  for (const t of teile) {
+    if (paket && (paket + ";" + t).length > 60) { senden(paket); paket = t; }
+    else paket = paket ? paket + ";" + t : t;
+  }
+  if (paket) await senden(paket);
+  if ("ls" in p.werte) stufeZeigen(p.werte.ls);
+  try { if (einstKanal) einstellungenZeigen(dec.decode(await einstKanal.readValue())); } catch (e) {}
+  melden(`Profil „${p.name}“ ist jetzt auf dem Vario`);
+};
+prZeigen();
 
 // ================================================================
 // PIN / Entsperren
@@ -745,17 +1033,33 @@ $("csv").onclick = () => {
 };
 $("sichern").onclick = async () => {
   const alle = await dbAlle();
-  if (!alle.length) { melden("Noch keine Flüge zum Sichern"); return; }
+  if (!alle.length && !startplaetze.length && !profile.length) { melden("Noch nichts zum Sichern"); return; }
   alle.forEach(f => delete f.werte);
-  herunterladen("sweef_sicherung_" + new Date().toISOString().slice(0, 10) + ".json", JSON.stringify({ sweef: 1, fluege: alle }), "application/json");
+  herunterladen("sweef_sicherung_" + new Date().toISOString().slice(0, 10) + ".json",
+    JSON.stringify({ sweef: 2, fluege: alle, startplaetze, profile }), "application/json");
 };
 $("laden_datei").onchange = async e => {
   const datei = e.target.files[0]; if (!datei) return;
   try {
     const d = JSON.parse(await datei.text());
-    if (!d.fluege) throw new Error("keine Sweef-Sicherung");
-    for (const f of d.fluege) await dbSchreiben(f);
-    melden(d.fluege.length + " Flüge geladen");
+    if (!d.fluege && !d.startplaetze && !d.profile) throw new Error("keine Sweef-Sicherung");
+    for (const f of (d.fluege || [])) await dbSchreiben(f);
+    let nSp = 0, nPr = 0;
+    (d.startplaetze || []).forEach(p => {
+      if (!p || !p.id || !p.name || !isFinite(p.hoehe)) return;
+      const i = startplaetze.findIndex(x => x.id === p.id);
+      if (i >= 0) startplaetze[i] = p; else startplaetze.push(p);
+      nSp++;
+    });
+    (d.profile || []).forEach(p => {
+      if (!p || !p.name || !p.werte) return;
+      const i = profile.findIndex(x => x.name === p.name);
+      if (i >= 0) profile[i] = p; else profile.push(p);
+      nPr++;
+    });
+    if (nSp) { speicherSchreiben(SP_KEY, startplaetze); spZeigen(); }
+    if (nPr) { speicherSchreiben(PR_KEY, profile); prZeigen(); }
+    melden(`${(d.fluege || []).length} Flüge, ${nSp} Startplätze, ${nPr} Profile geladen`);
     listeZeigen();
   } catch (err) { melden("Datei nicht lesbar: " + err.message); }
   e.target.value = "";
@@ -972,6 +1276,10 @@ async function wiederverbinden() {
 // ---- Start ----
 try { if (localStorage.getItem("sweefReiter") === "fluege") reiter("fluege"); } catch (e) {}
 listeZeigen();
+// Standort schon erlaubt? Dann gleich den naechsten Startplatz vorschlagen
+if (navigator.permissions && startplaetze.some(p => p.lat != null)) {
+  navigator.permissions.query({ name: "geolocation" }).then(r => { if (r.state === "granted") naechsterStartplatz(true); }).catch(() => {});
+}
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>

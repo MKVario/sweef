@@ -64,8 +64,8 @@ button:focus-visible, input:focus-visible, .knopf:focus-within { outline: 3px so
 .status { font-size: .9rem; color: var(--muted); }
 .status b { color: var(--fg); }
 
-.reiter { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
-.reiter button { border: 0; min-height: 40px; }
+.reiter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 4px; }
+.reiter button { border: 0; min-height: 40px; padding: 8px 4px; font-size: .95rem; }
 .reiter button[aria-selected=true] { background: var(--accent); color: var(--accent-fg); }
 
 .display {
@@ -87,6 +87,7 @@ section h2 { font: 600 1.15rem/1.2 var(--f-display); letter-spacing: .02em; marg
 section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-width: 60ch; }
 .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
 .row:first-of-type { border-top: 0; }
+details.sektion .row:first-of-type { border-top: 1px solid var(--line); }
 .row label { font-weight: 500; }
 .row .val { font: 600 1.05rem var(--f-display); font-variant-numeric: tabular-nums; min-width: 5.5em; text-align: right; }
 .row input[type=range] { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
@@ -132,7 +133,16 @@ section p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); max-wi
 .kurve { width: 100%; height: 240px; display: block; }
 .melden { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; font-size: .92rem; max-width: calc(100% - 32px); z-index: 5; }
-.gesperrt { opacity: .55; pointer-events: none; }
+body.getrennt .braucht-vario { opacity: .55; pointer-events: none; }
+details.sektion { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 0 16px; min-width: 0; }
+details.sektion > summary { font: 600 1.15rem/1.2 var(--f-display); letter-spacing: .02em; padding: 14px 0; min-height: 52px; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+details.sektion > summary::-webkit-details-marker { display: none; }
+details.sektion > summary::after { content: "+"; font: 600 1.4rem var(--f-body); color: var(--muted); }
+details.sektion[open] > summary::after { content: "–"; }
+details.sektion[open] { padding-bottom: 10px; }
+details.sektion > p.hint { margin: 0 0 6px; font-size: .88rem; color: var(--muted); }
+.warn { border-color: var(--sinken); }
+.warn b { color: var(--sinken); }
 .pinbox { border-color: var(--accent); }
 .pinreihe { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 8px 0 12px; }
 .pinreihe input, .feld input {
@@ -171,7 +181,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
 @media (max-width: 380px) { .werte { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 </head>
-<body>
+<body class="getrennt">
 <div class="wrap" id="app">
   <header>
     <h1>Sweef<small>Vario per Bluetooth</small></h1>
@@ -200,12 +210,14 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
   </section>
 
   <div class="reiter" role="tablist">
-    <button role="tab" id="tabVario" aria-selected="true" aria-controls="seiteVario">Einstellungen</button>
-    <button role="tab" id="tabFluege" aria-selected="false" aria-controls="seiteFluege">Flüge</button>
+    <button role="tab" id="tab_start" aria-selected="true" aria-controls="seite_start">Start</button>
+    <button role="tab" id="tab_einst" aria-selected="false" aria-controls="seite_einst">Einstellen</button>
+    <button role="tab" id="tab_fluege" aria-selected="false" aria-controls="seite_fluege">Flüge</button>
+    <button role="tab" id="tab_geraet" aria-selected="false" aria-controls="seite_geraet">Gerät</button>
   </div>
 
-  <!-- ===== Einstellungen ===== -->
-  <div id="seiteVario" class="stapel" role="tabpanel">
+  <!-- ===== Start: was man am Startplatz braucht ===== -->
+  <div id="seite_start" class="stapel" role="tabpanel">
     <section id="startplatz">
       <h2>Startplatz</h2>
       <p class="hint">Startplätze mit ihrer Höhe über Meer werden hier auf dem Handy gespeichert. Am Startplatz wählen und „Übernehmen“ tippen – dann zeigt das Vario die richtige Höhe über Meer.</p>
@@ -216,6 +228,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
           <select id="spWahl"></select>
           <button class="primary" id="spUebernehmen">Übernehmen</button>
         </div>
+        <div class="note" id="spAktuell"></div>
         <label class="check"><input type="checkbox" id="spNullen"> Höhe am Vario jetzt auf 0 setzen (ich stehe am Startplatz)</label>
         <div class="knopfreihe">
           <button id="spOrt">Nächsten Startplatz per GPS suchen</button>
@@ -243,7 +256,19 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
         <ul class="splist" id="spListe"></ul>
       </details>
     </section>
+      <section class="braucht-vario">
+        <h2>Lautstärke</h2>
+        <div class="stufen" id="stufen"></div>
+      </section>
+      <section class="braucht-vario">
+        <h2>Ton testen</h2>
+        <p class="hint">Spielt 4 Sekunden lang den Ton für diesen Steigwert. So hörst du Änderungen sofort, ohne zu fliegen.</p>
+        <div class="tests" id="tests"></div>
+      </section>
+  </div>
 
+  <!-- ===== Einstellungen ===== -->
+  <div id="seite_einst" class="stapel" role="tabpanel" hidden>
     <section id="profile">
       <h2>Profile</h2>
       <p class="hint">Speichert alle Einstellungen für Ton, Lautstärke, Display und Flugerkennung unter einem Namen, z. B. „Soaring“ oder „Thermik“. Startplatzhöhe und QNH gehören nicht dazu.</p>
@@ -265,9 +290,18 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
         <div class="note">Gleicher Name = altes Profil wird überschrieben.</div>
       </div>
     </section>
+    <p class="note">Tippe auf einen Bereich, um ihn aufzuklappen. Jede Änderung wird sofort im Vario gespeichert.</p>
+    <details class="sektion braucht-vario" id="ton"><summary>Piepton</summary></details>
+    <details class="sektion braucht-vario" id="hoehe"><summary>Höhe</summary>
+      <p class="hint">Für eine genaue Höhe über Meer entweder oben einen Startplatz übernehmen (oder die Höhe hier eintragen und am Startplatz nullen), oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
+    </details>
+    <details class="sektion braucht-vario" id="anzeige"><summary>Display</summary></details>
+    <details class="sektion braucht-vario" id="flug"><summary>Flugerkennung und Ausschalten</summary></details>
+  </div>
 
-    <div id="einstellungen" class="stapel gesperrt">
-      <section>
+  <!-- ===== Geraet ===== -->
+  <div id="seite_geraet" class="stapel" role="tabpanel" hidden>
+      <section class="braucht-vario">
         <h2>Vario suchen</h2>
         <p class="hint">Das Vario piept 20 Sekunden lang laut, auch wenn es stumm geschaltet ist. Eine Taste am Vario beendet es.</p>
         <div class="suchen knopfreihe">
@@ -275,22 +309,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
           <button id="suchenAus">Stopp</button>
         </div>
       </section>
-      <section>
-        <h2>Lautstärke</h2>
-        <div class="stufen" id="stufen"></div>
-      </section>
-      <section>
-        <h2>Ton testen</h2>
-        <p class="hint">Spielt 4 Sekunden lang den Ton für diesen Steigwert. So hörst du Änderungen sofort, ohne zu fliegen.</p>
-        <div class="tests" id="tests"></div>
-      </section>
-      <section id="ton"><h2>Piepton</h2></section>
-      <section id="hoehe"><h2>Höhe</h2>
-        <p class="hint">Für eine genaue Höhe über Meer entweder oben einen Startplatz übernehmen (oder die Höhe hier eintragen und am Startplatz nullen), oder den aktuellen QNH aus dem Flugwetter eintragen.</p>
-      </section>
-      <section id="anzeige"><h2>Display</h2></section>
-      <section id="flug"><h2>Flugerkennung und Ausschalten</h2></section>
-      <section id="vario">
+      <section class="braucht-vario" id="vario">
         <h2>Name und Begrüßung</h2>
         <div class="feld">
           <label for="nameZusatz">Name des Varios</label>
@@ -305,7 +324,7 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
           <div><button id="grussSpeichern">Begrüßung speichern</button></div>
         </div>
       </section>
-      <section id="sicherheit">
+      <section class="braucht-vario" id="sicherheit">
         <h2>PIN</h2>
         <p class="hint" id="pinStatus">Keine PIN: jedes Handy kann sich verbinden.</p>
         <div class="pinreihe">
@@ -315,15 +334,14 @@ details summary { cursor: pointer; font-weight: 600; padding: 10px 0; min-height
         </div>
         <p class="note">Dieses Handy bleibt verbunden, andere Handys brauchen danach die PIN. PIN vergessen? Vario ausschalten, USB-Kabel anstecken (Ladeanzeige erscheint) und Taste 2 acht Sekunden halten.</p>
       </section>
-      <section>
+      <section class="braucht-vario">
         <h2>Zurücksetzen</h2>
         <div class="confirm" id="resetBox"></div>
       </section>
-    </div>
   </div>
 
   <!-- ===== Fluege ===== -->
-  <div id="seiteFluege" class="stapel" role="tabpanel" hidden>
+  <div id="seite_fluege" class="stapel" role="tabpanel" hidden>
     <section id="flugDetail" hidden>
       <div class="knopfreihe" style="padding-top:12px">
         <button id="zurueck">← Alle Flüge</button>
@@ -438,17 +456,17 @@ function bestaetigenBox(box, knopfText, frage, jaText, aktion) {
 }
 
 // ---- Reiter ----
+const SEITEN = ["start", "einst", "fluege", "geraet"];
 function reiter(welcher) {
-  const fl = welcher === "fluege";
-  $("tabVario").setAttribute("aria-selected", String(!fl));
-  $("tabFluege").setAttribute("aria-selected", String(fl));
-  $("seiteVario").hidden = fl;
-  $("seiteFluege").hidden = !fl;
-  if (fl) listeZeigen();
+  if (!SEITEN.includes(welcher)) welcher = "start";
+  SEITEN.forEach(n => {
+    $("tab_" + n).setAttribute("aria-selected", String(n === welcher));
+    $("seite_" + n).hidden = n !== welcher;
+  });
+  if (welcher === "fluege") listeZeigen();
   try { localStorage.setItem("sweefReiter", welcher); } catch (e) {}
 }
-$("tabVario").onclick = () => reiter("vario");
-$("tabFluege").onclick = () => reiter("fluege");
+SEITEN.forEach(n => $("tab_" + n).onclick = () => reiter(n));
 
 // ================================================================
 // Einstellungen
@@ -560,6 +578,7 @@ function einstellungenZeigen(text) {
     if (art === "range") $("v_" + k).textContent = zahl(d[k], schritt) + " " + einheit;
   });
   if ("ls" in d) stufeZeigen(d.ls);
+  if ("nn" in d) { varioNN = parseFloat(d.nn) || 0; vorschlagZeigen(false); }
 }
 function liveZeigen(text) {
   const d = zerlegen(text);
@@ -703,19 +722,50 @@ async function naechsterStartplatz(still) {
   mitOrt.forEach(p => { const km = entfernungKm(ort, p); if (km < bestKm) { bestKm = km; best = p; } });
   $("spGpsInfo").textContent = "";
   if (best && bestKm <= 2) {
+    naheSp = { p: best, km: bestKm };
     $("spWahl").value = best.id;
     $("spNullen").checked = bestKm <= 0.5;
-    box.innerHTML = `<span>Nächster Startplatz</span><b>${esc(best.name)} · ${Math.round(best.hoehe)} m über Meer</b>
-      <span class="note">${kmText(bestKm)} entfernt${bestKm <= 0.5 ? " – du bist am Startplatz" : ""}</span>
-      <div class="knopfreihe"><button class="primary" id="spVorschlagOk">Übernehmen</button></div>`;
-    box.hidden = false;
-    $("spVorschlagOk").onclick = () => spUebernehmen();
-  } else if (!still) {
-    box.innerHTML = `<span>${best ? `Kein Startplatz in der Nähe (nächster: ${esc(best.name)}, ${kmText(bestKm)}).` : "Noch kein Startplatz mit Standort gespeichert."}</span>
-      <div class="knopfreihe"><button class="primary" id="spHierNeu">Hier neuen Startplatz anlegen</button></div>`;
-    box.hidden = false;
-    $("spHierNeu").onclick = () => { box.hidden = true; spFormular(null, ort); };
+    vorschlagZeigen(true);
+  } else {
+    naheSp = null;
+    if (!still) {
+      box.className = "vorschlag";
+      box.innerHTML = `<span>${best ? `Kein Startplatz in der Nähe (nächster: ${esc(best.name)}, ${kmText(bestKm)}).` : "Noch kein Startplatz mit Standort gespeichert."}</span>
+        <div class="knopfreihe"><button class="primary" id="spHierNeu">Hier neuen Startplatz anlegen</button></div>`;
+      box.hidden = false;
+      $("spHierNeu").onclick = () => { box.hidden = true; spFormular(null, ort); };
+    }
   }
+}
+
+// Vorschlag bzw. Warnung: passt die Startplatzhoehe im Vario zum Startplatz, an dem ich stehe?
+let varioNN = null, naheSp = null;
+function passt() { return varioNN !== null && naheSp && Math.abs(varioNN - naheSp.p.hoehe) <= 3; }
+function vorschlagZeigen(neuGesucht) {
+  const box = $("spVorschlag");
+  $("spAktuell").textContent = varioNN === null ? "" :
+    varioNN === 0 ? "Im Vario ist keine Startplatzhöhe eingestellt." : `Im Vario eingestellt: ${Math.round(varioNN)} m über Meer.`;
+  if (!naheSp) return;
+  const p = naheSp.p, km = naheSp.km;
+  if (passt()) {                                     // alles gut: kein Kasten noetig
+    box.hidden = true;
+    $("spAktuell").textContent = `Im Vario eingestellt: ${Math.round(varioNN)} m über Meer – passt zu ${p.name}.`;
+    return;
+  }
+  const falsch = varioNN !== null && varioNN !== 0;
+  box.className = "vorschlag" + (falsch ? " warn" : "");
+  box.innerHTML = (falsch
+      ? `<b>Achtung: Das Vario rechnet noch mit ${Math.round(varioNN)} m über Meer</b>
+         <span>Du bist am Startplatz ${esc(p.name)} (${Math.round(p.hoehe)} m) – die Höhe über Meer im Display stimmt so nicht.</span>`
+      : `<span>Nächster Startplatz</span><b>${esc(p.name)} · ${Math.round(p.hoehe)} m über Meer</b>`) +
+    `<span class="note">${kmText(km)} entfernt${km <= 0.5 ? " – du bist am Startplatz" : ""}</span>
+     <div class="knopfreihe"><button class="primary" id="spVorschlagOk">${esc(p.name)} übernehmen</button></div>`;
+  if (neuGesucht || falsch) box.hidden = false;
+  $("spVorschlagOk").onclick = () => { $("spWahl").value = p.id; spUebernehmen(); };
+}
+function gpsAutomatisch() {                         // nur wenn Standort schon erlaubt ist
+  if (!navigator.permissions || !startplaetze.some(p => p.lat != null)) return;
+  navigator.permissions.query({ name: "geolocation" }).then(r => { if (r.state === "granted") naechsterStartplatz(true); }).catch(() => {});
 }
 $("spOrt").onclick = () => naechsterStartplatz(false);
 
@@ -725,7 +775,7 @@ async function spUebernehmen() {
   if (!befehlKanal) { melden("Erst mit dem Vario verbinden"); return; }
   const nullen = $("spNullen").checked;
   await senden(`nn=${Math.round(p.hoehe)}` + (nullen ? ";null" : ""), `${p.name}: ${Math.round(p.hoehe)} m übernommen` + (nullen ? ", Höhe genullt" : ""));
-  $("spVorschlag").hidden = true;
+  if (naheSp && naheSp.p.id === p.id) $("spVorschlag").hidden = true;
 }
 $("spUebernehmen").onclick = spUebernehmen;
 $("spWahl").onchange = () => { $("spNullen").checked = false; };
@@ -820,11 +870,12 @@ async function entsperren() {
   entsperrt = true;
   $("pinBox").hidden = true;
   $("pinEingabe").value = "";
-  $("einstellungen").classList.remove("gesperrt");
+  document.body.classList.remove("getrennt");
   $("display").classList.remove("aus");
   if (datenKanalDa) $("laden").disabled = false;
   $("status").innerHTML = "<b>Verbunden</b> mit " + (varioInfoDaten.nm || geraet.name || "Sweef") + ". Änderungen werden sofort im Vario gespeichert.";
   try { if (einstKanal) einstellungenZeigen(dec.decode(await einstKanal.readValue())); } catch (e) {}
+  gpsAutomatisch();
 }
 
 // Antworten des Varios auf PIN, Name usw. (kommen ueber den Daten-Kanal)
@@ -1252,8 +1303,9 @@ async function einrichten() {
 
 function getrennt() {
   befehlKanal = null; einstKanal = null; entsperrt = false;
+  varioNN = null; vorschlagZeigen(false);
   $("verbinden").textContent = "Verbinden";
-  $("einstellungen").classList.add("gesperrt");
+  document.body.classList.add("getrennt");
   $("display").classList.add("aus");
   $("laden").disabled = true;
   $("pinBox").hidden = true;
@@ -1274,12 +1326,10 @@ async function wiederverbinden() {
 }
 
 // ---- Start ----
-try { if (localStorage.getItem("sweefReiter") === "fluege") reiter("fluege"); } catch (e) {}
+try { reiter(localStorage.getItem("sweefReiter") || "start"); } catch (e) { reiter("start"); }
 listeZeigen();
 // Standort schon erlaubt? Dann gleich den naechsten Startplatz vorschlagen
-if (navigator.permissions && startplaetze.some(p => p.lat != null)) {
-  navigator.permissions.query({ name: "geolocation" }).then(r => { if (r.state === "granted") naechsterStartplatz(true); }).catch(() => {});
-}
+gpsAutomatisch();
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>

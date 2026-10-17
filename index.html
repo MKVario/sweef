@@ -402,6 +402,7 @@ const FELDER = [
   ["f1","ton","Tonhöhe bei schwachem Steigen","Hz",300,2000,50,"range"],
   ["f2","ton","Tonhöhe bei starkem Steigen","Hz",800,4000,50,"range"],
   ["fk","ton","Tonhöhe Sinkalarm","Hz",200,1500,50,"range"],
+  ["gw","ton","G-Warnung ab","g",0,8,0.5,"range","Doppelter Warnton bei hoher G-Last – auch wenn das Vario stumm ist. 0 = aus. Ab etwa 5 g droht ein Blackout."],
   ["nz","ton","Nullschieber","",0,1,1,"switch","Leises Ticken, wenn es kaum noch sinkt. Zeigt tragende Luft, bevor der Steigton kommt."],
   ["nb","ton","Nullschieber ab","m/s",-1.5,0,0.05,"range","Ab diesem Wert tickt es, bis der Steigton einsetzt."],
   ["fs","ton","Ton-Skala","m/s",2,30,0.5,"range","Bei diesem Steigen ist der Ton am höchsten und schnellsten. Größer = ruhiger."],
@@ -410,6 +411,8 @@ const FELDER = [
   ["pa","ton","Piep-Anteil","%",10,90,5,"range","Wie viel vom Takt der Ton klingt. Kleiner = kürzere Pieps."],
   ["nn","hoehe","Startplatz über Meer","m",-100,5000,1,"number","0 = nicht benutzen."],
   ["qn","hoehe","QNH","hPa",0,1100,0.1,"number","Luftdruck auf Meereshöhe, z. B. 1018. 0 = nicht benutzen."],
+  ["hl","anzeige","Helligkeit","%",5,100,5,"range","Dunkler spart Akku und blendet abends weniger. Braucht Vario-Programm ab 2.10_15."],
+  ["ga","anzeige","G-Anzeige automatisch","",0,1,1,"switch","In Spiralen (über 1,5 g) zeigt das Display groß die G-Last statt der Höhe. Braucht Vario-Programm ab 2.10_16."],
   ["pf","anzeige","Pfeil anzeigen","",0,1,1,"switch"],
   ["ph","anzeige","Pfeil nur als Umriss","",0,1,1,"switch"],
   ["pt","anzeige","Pfeil-Tempo","",1,80,1,"range","Pixel pro Sekunde je 1 m/s."],
@@ -975,7 +978,7 @@ async function listeZeigen() {
     const a = f.werte || (f.werte = auswerten(f));
     const li = document.createElement("li");
     li.innerHTML = `<button><span class="datum">${datumText(f)}</span><span class="dauer">${dauerText(a.dauer)}</span>
-      <span class="klein">max. ${Math.round(a.max)} m · bestes Steigen ${zahl(a.best, 0.1)} m/s · ${Math.round(a.gewinn)} Hm</span></button>`;
+      <span class="klein">max. ${Math.round(a.max)} m · bestes Steigen ${zahl(a.best, 0.1)} m/s · ${Math.round(a.gewinn)} Hm${f.gmax ? ` · ${zahl(f.gmax, 0.1)} g` : ""}</span></button>`;
     li.querySelector("button").onclick = () => detailZeigen(f);
     ul.appendChild(li);
   });
@@ -997,6 +1000,7 @@ function detailZeigen(f) {
     ["bestes Steigen", "+" + zahl(a.best, 0.1) + " m/s", "up"],
     ["stärkstes Sinken", zahl(a.sink, 0.1) + " m/s", "down"],
   ];
+  if (f.gmax) w.push(["max. G-Last", zahl(f.gmax, 0.1) + " g", ""]);
   $("dWerte").innerHTML = w.map(([l, v, c]) => `<div><span class="lbl">${l}</span><span class="w ${c}">${v}</span></div>`).join("");
   kurveZeichnen(f, a);
   bestaetigenBox($("flugLoeschenBox"), "Flug vom Handy löschen", "Diesen Flug wirklich vom Handy löschen?", "Ja, löschen", async () => {
@@ -1136,7 +1140,8 @@ function datenEmpfangen(dv) {
   const t = text.split(",");
   if (antwortVerarbeiten(t)) return;
   if (t[0] === "L") {
-    varioListe.push({ nr: +t[1], zeit: +t[2], boot: +t[3], up: +t[4], anzahl: +t[5], nn: +t[6], vor: +t[7] });
+    varioListe.push({ nr: +t[1], zeit: +t[2], boot: +t[3], up: +t[4], anzahl: +t[5], nn: +t[6], vor: +t[7],
+                      gmax: t[8] !== undefined && +t[8] > 0 ? +t[8] / 10 : null });
   } else if (t[0] === "LE") {
     varioInfo = { boot: +t[1], up: +t[2], frei: +t[3] / 10, anzahl: +t[4], fliegt: t[5] === "1", empfangen: Date.now() };
     if (laden && laden.listeOk) laden.listeOk();
@@ -1213,6 +1218,7 @@ $("laden").onclick = async () => {
       const z = startZeit(vf);
       const hoehe = Array.from(roh, w => Math.round((w - 32768)) / 10);
       const flug = { key: schluessel(vf), nr: vf.nr, start: z.start, startGenau: z.genau, vor: vf.vor, nn: vf.nn, hoehe, geladen: Date.now() };
+      if (vf.gmax) flug.gmax = vf.gmax;
       flug.werte = auswerten(flug);
       await dbSchreiben(flug);
       laden.erledigt += vf.anzahl; laden.da = 0; fortschritt();

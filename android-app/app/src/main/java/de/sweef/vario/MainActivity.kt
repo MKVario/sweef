@@ -93,6 +93,12 @@ class MainActivity : Activity() {
         web.loadUrl(START)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // App kommt (wieder) in den Vordergrund: Seite darf nach Updates schauen
+        zurJs("_ereignis", JSONObject.quote("vordergrund"), "{}")
+    }
+
     override fun onDestroy() {
         VarioBle.ereignis = null
         web.destroy()

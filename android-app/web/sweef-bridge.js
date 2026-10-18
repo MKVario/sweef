@@ -140,6 +140,8 @@
         if (!jsVerbunden && aktuell && typeof einrichten === "function" && !absichtlichGetrennt) {
           einrichten().catch(() => {});
         }
+      } else if (art === "vordergrund") {
+        if (Date.now() - letztePruefung > 10 * 60 * 1000) versionenPruefen();
       } else if (art === "appupdate") {
         const t = document.getElementById("hinweisText");
         if (t) t.textContent = d.text;
@@ -222,6 +224,7 @@
 
   let verfuegbar = null;
   async function fwSuchen() {
+    versionenPruefen();
     const info = document.getElementById("fwInfo");
     const start = document.getElementById("fwStart");
     start.hidden = true;
@@ -288,6 +291,7 @@
 
   // ---------------- Neue Versionen (App und Firmware) ----------------
   let neueste = null;          // {app, appUrl, firmware, eigene}
+  let letztePruefung = 0;
   let fwHinweisWeg = false;
 
   function hinweisLeiste(text, knopf, aktion, wegKlick) {
@@ -310,6 +314,7 @@
   }
 
   async function versionenPruefen() {
+    letztePruefung = Date.now();
     try { neueste = JSON.parse(await rufen("versionenPruefen")); } catch (e) { return; }
     if (neueste.app > 0 && neueste.app > neueste.eigene && neueste.appUrl) {
       hinweisLeiste("Neue Sweef-App 1.0." + neueste.app + " ist da.", "Installieren",

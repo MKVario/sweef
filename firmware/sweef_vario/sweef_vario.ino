@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.21"
+#define FW_VERSION "2.10.22"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -105,6 +105,7 @@ float FLUG_START_HOEHE   = 5.0;  // m Hoehenaenderung = Flug beginnt
 int   FLUG_START_DAUER_S = 10;   // s, so lange muss die Hoehe abweichen
 int   LANDUNG_RUHE_S     = 120;  // s ruhig auf gleicher Hoehe = gelandet
 int LIVE_MS = 500;                  // so oft gehen Live-Werte ans Handy (ms)
+int ZAHL_MS = 500;                  // Steigwert-Zahl auf dem Display: Mittel ueber ... ms
 const int   ANZEIGE_MS   = 40;    // neues Bild alle 40 ms (25 Bilder pro Sekunde)
 
 // Pfeil im Hintergrund der Steigzahl
@@ -438,6 +439,22 @@ float vJetzt() {
   if (testBis != 0 && (long)(millis() - testBis) < 0) return testSteigen;
   testBis = 0;
   return v;
+}
+
+// Steigwert fuer die Zahl auf dem Display: ueber ZAHL_MS gemittelt, damit
+// sie ruhig bleibt. Ton und Pfeile nutzen weiter den schnellen Wert.
+float vAnzeige() {
+  static float summe = 0, wert = 0;
+  static int anzahl = 0;
+  static unsigned long seit = 0;
+  float jetzt = vJetzt();
+  if (testBis != 0) { summe = 0; anzahl = 0; seit = millis(); return wert = jetzt; }   // Ton-Test: sofort
+  summe += jetzt; anzahl++;
+  if (millis() - seit >= (unsigned long)ZAHL_MS) {
+    wert = summe / anzahl;
+    summe = 0; anzahl = 0; seit = millis();
+  }
+  return wert;
 }
 
 void kalmanReset() {
@@ -1273,7 +1290,7 @@ void gModusPruefen() {
 }
 
 void bildZeichnen() {
-  float v = vJetzt();
+  float v = vAnzeige();
   char text[20];
   anzeige.clearBuffer();
 
@@ -1683,7 +1700,7 @@ void gModusPruefen() {
 }
 
 void bildZeichnen() {
-  float v = vJetzt();
+  float v = vAnzeige();
   char text[20];
   anzeige.clearBuffer();
 
@@ -2214,6 +2231,7 @@ Einstellung EINST[] = {
   {"ga", 'b', &G_AUTO,               0,     1},   // G-Anzeige automatisch
   {"gw", 'f', &G_WARNUNG,          0.0,   8.0},   // G-Warnung ab (g), 0 = aus
   {"la", 'i', &LIVE_MS,            100,  2000},   // Live-Werte ans Handy alle ... ms
+  {"za", 'i', &ZAHL_MS,            100,  2000},   // Steigwert-Zahl am Display: Mittel ueber ... ms
 };
 const int ANZ_EINST = sizeof(EINST) / sizeof(EINST[0]);
 float standardWerte[ANZ_EINST];    // Grundeinstellung (fuer "reset")

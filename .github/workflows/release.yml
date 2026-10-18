@@ -39,16 +39,16 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}
+          tag_name: v${{ env.VERSION }}-app${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: Sweef ${{ env.VERSION }}
+          name: Sweef-App 1.0.${{ github.run_number }} · Firmware ${{ env.VERSION }}
           make_latest: true
           body: |
-            **App:** sweef-app.apk aufs Handy laden und installieren.
+            **App:** sweef_app_v1_0_${{ github.run_number }}.apk aufs Handy laden und installieren (installiert sich über die alte Version).
             **Firmware:** wird von der App per Bluetooth aufgespielt (Gerät → Firmware-Update).
             Für USB: sweef_firmware_gross.hex / sweef_firmware_klein.hex
           files: |
-            dateien/sweef-app.apk
+            dateien/sweef_app_v1_0_*.apk
             dateien/sweef_firmware_gross.zip
             dateien/sweef_firmware_klein.zip
             dateien/sweef_firmware_gross.hex

@@ -68,10 +68,11 @@ jobs:
 
       - name: APK umbenennen
         run: |
-          cp android-app/$APK sweef-app.apk
-          echo "::notice::APK $(du -h sweef-app.apk | cut -f1) gebaut"
+          NAME=sweef_app_v1_0_${{ github.run_number }}.apk
+          cp android-app/$APK $NAME
+          echo "::notice::$NAME ($(du -h $NAME | cut -f1)) gebaut"
 
       - uses: actions/upload-artifact@v4
         with:
           name: sweef-app
-          path: sweef-app.apk
+          path: sweef_app_v1_0_*.apk

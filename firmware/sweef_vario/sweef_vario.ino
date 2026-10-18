@@ -55,6 +55,10 @@
 #endif
 #define FW_VERSION "2.10.18"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
+// Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
+volatile float gsKmh = -1;
+volatile unsigned long gsZeit = 0;
+bool gsDa() { return gsZeit != 0 && millis() - gsZeit < 5000 && gsKmh >= 0; }
 #include <Wire.h>
 #include <Adafruit_DPS310.h>
 #include <U8g2lib.h>
@@ -2377,11 +2381,6 @@ void einstLaden() {
 // Befehle kommen im Bluetooth-Teil an und werden in loop() ausgefuehrt
 volatile bool befehlDa = false;
 char befehlPuffer[201];
-
-// Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
-volatile float gsKmh = -1;
-volatile unsigned long gsZeit = 0;
-bool gsDa() { return gsZeit != 0 && millis() - gsZeit < 5000 && gsKmh >= 0; }
 
 void befehlEmpfangen(uint16_t verbindung, BLECharacteristic* chr, uint8_t* daten, uint16_t laenge) {
   if (laenge > 3 && laenge < 12 && memcmp(daten, "gs=", 3) == 0) {   // GPS-Tempo: sofort merken

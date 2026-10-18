@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.18"
+#define FW_VERSION "2.10.19"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -2888,7 +2888,11 @@ void setup() {
 
   // Ohne USB (also mit Akku): nur einschalten, wenn Taste 1 gehalten
   // und bestaetigt wird. Sonst sofort wieder schlafen.
-  if (!usbSteckt()) {
+  // Nach einem Firmware-Update per Handy direkt eingeschaltet starten
+  bool nachUpdate = InternalFS.exists("/nachupdate");
+  if (nachUpdate) InternalFS.remove("/nachupdate");
+
+  if (!usbSteckt() && !nachUpdate) {
     anzeige.setPowerSave(1);
     if (!einschaltAbfrage()) tiefschlaf();
   } else if (readResetReason() & POWER_RESETREAS_VBUS_Msk) {
@@ -2950,6 +2954,7 @@ void updateModusStarten() {
   if (einstSpeichernUm) einstSpeichern();
   if (speichernUm) lautSpeichern();
   meldung("Update", "per Handy", "bitte", "warten...");
+  textSpeichern("/nachupdate", "1");   // nach dem Update gleich eingeschaltet starten
   delay(300);
   enterOTADfu();                 // startet den Bootloader im Bluetooth-Update-Modus
 }

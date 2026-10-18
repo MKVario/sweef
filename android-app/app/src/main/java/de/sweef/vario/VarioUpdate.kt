@@ -116,11 +116,9 @@ object VarioUpdate {
                 val n = d.optString("name")
                 if (id == adr.uppercase() || id == plus1 || n.contains("DFU", true)) { ziel = d; break }
             }
-            if (ziel == null) {
-                // nicht gesehen: trotzdem mit der alten Adresse versuchen
-                ziel = JSONObject().put("id", adr).put("name", "Sweef")
-            }
-            aufspielen(ctx, ziel.getString("id"), ziel.optString("name"), adr, datei, meldung)
+            // nicht gesehen: trotzdem mit der alten Adresse versuchen
+            val z: JSONObject = ziel ?: JSONObject().put("id", adr).put("name", "Sweef")
+            aufspielen(ctx, z.getString("id"), z.optString("name"), adr, datei, meldung)
         }
     }
 

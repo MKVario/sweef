@@ -53,12 +53,6 @@
 #ifndef DISPLAY_KLEIN
 #define DISPLAY_KLEIN 0
 #endif
-#define FW_VERSION "2.10.18"
-unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
-// Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
-volatile float gsKmh = -1;
-volatile unsigned long gsZeit = 0;
-bool gsDa() { return gsZeit != 0 && millis() - gsZeit < 5000 && gsKmh >= 0; }
 #include <Wire.h>
 #include <Adafruit_DPS310.h>
 #include <U8g2lib.h>
@@ -67,6 +61,13 @@ bool gsDa() { return gsZeit != 0 && millis() - gsZeit < 5000 && gsKmh >= 0; }
 #include <bluefruit.h>
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
+
+#define FW_VERSION "2.10.18"
+unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
+// Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
+volatile float gsKmh = -1;
+volatile unsigned long gsZeit = 0;
+bool gsDa() { return gsZeit != 0 && millis() - gsZeit < 5000 && gsKmh >= 0; }
 
 // ---------- Einstellungen (hier kannst du Werte aendern) ----------
 float STEIG_EIN    = 0.10;  // m/s, ab hier piept es

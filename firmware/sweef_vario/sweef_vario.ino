@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.19"
+#define FW_VERSION "2.10.20"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -104,6 +104,7 @@ float QNH                = 0;    // hPa, Luftdruck auf Meereshoehe (aus dem
 float FLUG_START_HOEHE   = 5.0;  // m Hoehenaenderung = Flug beginnt
 int   FLUG_START_DAUER_S = 10;   // s, so lange muss die Hoehe abweichen
 int   LANDUNG_RUHE_S     = 120;  // s ruhig auf gleicher Hoehe = gelandet
+int LIVE_MS = 500;                  // so oft gehen Live-Werte ans Handy (ms)
 const int   ANZEIGE_MS   = 40;    // neues Bild alle 40 ms (25 Bilder pro Sekunde)
 
 // Pfeil im Hintergrund der Steigzahl
@@ -2212,6 +2213,7 @@ Einstellung EINST[] = {
   {"hl", 'i', &HELLIGKEIT,           5,   100},   // Display-Helligkeit (%)
   {"ga", 'b', &G_AUTO,               0,     1},   // G-Anzeige automatisch
   {"gw", 'f', &G_WARNUNG,          0.0,   8.0},   // G-Warnung ab (g), 0 = aus
+  {"la", 'i', &LIVE_MS,            100,  2000},   // Live-Werte ans Handy alle ... ms
 };
 const int ANZ_EINST = sizeof(EINST) / sizeof(EINST[0]);
 float standardWerte[ANZ_EINST];    // Grundeinstellung (fuer "reset")
@@ -2679,7 +2681,7 @@ void bluetoothArbeiten() {
   if (einstSpeichernUm && (long)(millis() - einstSpeichernUm) >= 0) einstSpeichern();
 
   static unsigned long letzteLive = 0;
-  if (Bluefruit.connected() && !gesperrt() && millis() - letzteLive >= 500) {
+  if (Bluefruit.connected() && !gesperrt() && millis() - letzteLive >= (unsigned long)LIVE_MS) {
     letzteLive = millis();
     char buf[120], z1[16], z2[16];
     zahlText(z1, sizeof(z1), vJetzt());

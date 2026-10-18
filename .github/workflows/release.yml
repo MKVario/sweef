@@ -1,0 +1,56 @@
+name: Veroeffentlichen
+
+# Jede Aenderung auf "main" baut Firmware und App und legt sie als
+# neueste Version auf GitHub ab. Von dort laedt die App ihre Updates.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'firmware/**'
+      - 'android-app/**'
+      - 'index.html'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    uses: ./.github/workflows/firmware.yml
+
+  app:
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
+
+  veroeffentlichen:
+    needs: [firmware, app]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dateien
+          merge-multiple: true
+
+      - name: Version lesen
+        run: |
+          ls -la dateien
+          echo "VERSION=$(cat dateien/version.txt)" >> $GITHUB_ENV
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
+          name: Sweef ${{ env.VERSION }}
+          make_latest: true
+          body: |
+            **App:** sweef-app.apk aufs Handy laden und installieren.
+            **Firmware:** wird von der App per Bluetooth aufgespielt (Gerät → Firmware-Update).
+            Für USB: sweef_firmware_gross.hex / sweef_firmware_klein.hex
+          files: |
+            dateien/sweef-app.apk
+            dateien/sweef_firmware_gross.zip
+            dateien/sweef_firmware_klein.zip
+            dateien/sweef_firmware_gross.hex
+            dateien/sweef_firmware_klein.hex
+            dateien/version.txt

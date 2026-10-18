@@ -2,13 +2,13 @@ name: App bauen
 
 on:
   push:
-    branches: ['**']
-    tags: ['v*']
+    branches-ignore: [main]
     paths:
       - 'android-app/**'
       - 'index.html'
       - '.github/workflows/android.yml'
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: write
@@ -75,9 +75,3 @@ jobs:
         with:
           name: sweef-app
           path: sweef-app.apk
-
-      - name: In Release hochladen
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: sweef-app.apk

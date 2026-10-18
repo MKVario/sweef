@@ -42,8 +42,12 @@ jobs:
           SWEEF_KEYSTORE_PW: ${{ secrets.SWEEF_KEYSTORE_PW }}
         run: |
           if [ -z "$SWEEF_KEYSTORE_PW" ]; then
-            echo "::error::Das Geheimnis SWEEF_KEYSTORE_PW fehlt (GitHub > Settings > Secrets and variables > Actions)"
-            exit 1
+            echo "::warning::Geheimnis SWEEF_KEYSTORE_PW fehlt - baue nur eine Test-Version"
+            echo "ZIEL=assembleDebug" >> $GITHUB_ENV
+            echo "APK=app/build/outputs/apk/debug/app-debug.apk" >> $GITHUB_ENV
+          else
+            echo "ZIEL=assembleRelease" >> $GITHUB_ENV
+            echo "APK=app/build/outputs/apk/release/app-release.apk" >> $GITHUB_ENV
           fi
 
       - name: APK bauen
@@ -53,15 +57,18 @@ jobs:
         working-directory: android-app
         run: |
           set +e
-          gradle --no-daemon assembleRelease 2>&1 | tee bau.log
+          gradle --no-daemon $ZIEL 2>&1 | tee bau.log
           status=${PIPESTATUS[0]}
           set -e
-          grep -E "^e: |error:|What went wrong|Could not|> " bau.log | grep -v "^> Task" | head -25 | while IFS= read -r z; do echo "::error::$z"; done
+          melde() { z="${2//%/%25}"; z="${z//$'\r'/}"; z="$(echo "$z" | cut -c1-300)"; [ -n "$z" ] && echo "::$1::$z"; return 0; }
+          if [ $status -ne 0 ]; then
+            grep -E "^e: |error:|What went wrong|Could not|^> |Execution failed" bau.log | grep -v "^> Task" | head -25 | while IFS= read -r z; do melde error "$z"; done
+          fi
           exit $status
 
       - name: APK umbenennen
         run: |
-          cp android-app/app/build/outputs/apk/release/app-release.apk sweef-app.apk
+          cp android-app/$APK sweef-app.apk
           echo "::notice::APK $(du -h sweef-app.apk | cut -f1) gebaut"
 
       - uses: actions/upload-artifact@v4

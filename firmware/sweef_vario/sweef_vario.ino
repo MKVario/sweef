@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.20"
+#define FW_VERSION "2.10.21"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -2903,6 +2903,11 @@ void setup() {
   }
 
   anzeige.setPowerSave(0);
+  if (nachUpdate) {                    // kurz bestaetigen, dass das Update geklappt hat
+    meldung("Update", "fertig!", "Version", FW_VERSION);
+    kurzerPiep(1500, 80); delay(60); kurzerPiep(2000, 120);
+    delay(2500);
+  }
   startBild("Ruhig", "halten...");
   Serial.println("Startbild gezeigt");
   unsigned long startBildAb = millis();
@@ -2955,7 +2960,7 @@ void updateModusStarten() {
   verstaerkerAus();
   if (einstSpeichernUm) einstSpeichern();
   if (speichernUm) lautSpeichern();
-  meldung("Update", "per Handy", "bitte", "warten...");
+  meldung("Update", "per Handy", "ca. 3 Min.", "warten...");
   textSpeichern("/nachupdate", "1");   // nach dem Update gleich eingeschaltet starten
   delay(300);
   enterOTADfu();                 // startet den Bootloader im Bluetooth-Update-Modus

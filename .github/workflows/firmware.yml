@@ -31,17 +31,31 @@ jobs:
           pip install adafruit-nrfutil
 
       - name: Kompilieren
+        shell: bash
         run: |
           if [ "${{ matrix.display }}" = "klein" ]; then FLAG="-DDISPLAY_KLEIN=1"; else FLAG="-DDISPLAY_KLEIN=0"; fi
+          set +e
           arduino-cli compile --fqbn Seeeduino:nrf52:xiaonRF52840Sense \
             --build-property "compiler.cpp.extra_flags=$FLAG" \
-            --output-dir build firmware/sweef_vario
-          ls -la build
+            --output-dir build firmware/sweef_vario 2>&1 | tee compile.log
+          status=${PIPESTATUS[0]}
+          set -e
+          # Fehler als Hinweise sichtbar machen
+          grep -E "error|Error" compile.log | head -20 | while IFS= read -r z; do echo "::error::$z"; done
+          grep -E "Sketch uses|Global variables" compile.log | while IFS= read -r z; do echo "::notice::${{ matrix.display }}: $z"; done
+          ls build | while IFS= read -r z; do echo "::notice::Datei: $z"; done
+          exit $status
 
       - name: Update-Datei (DFU) erzeugen
         run: |
           HEX=$(ls build/*.hex | head -1)
-          adafruit-nrfutil dfu genpkg --dev-type 0x0052 --sd-req 0x0123 --application "$HEX" sweef_firmware_${{ matrix.display }}.zip
+          if ls build/*.zip >/dev/null 2>&1; then
+            cp "$(ls build/*.zip | head -1)" sweef_firmware_${{ matrix.display }}.zip
+            echo "::notice::DFU-Paket vom Board-Paket uebernommen"
+          else
+            adafruit-nrfutil dfu genpkg --dev-type 0x0052 --application "$HEX" sweef_firmware_${{ matrix.display }}.zip
+            echo "::notice::DFU-Paket mit adafruit-nrfutil erzeugt"
+          fi
           cp "$HEX" sweef_firmware_${{ matrix.display }}.hex
           ls -la *.zip
 

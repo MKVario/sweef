@@ -48,6 +48,13 @@
 // - Vario suchen laeuft:    beliebige Taste = Ton aus
 // - Lademodus, Taste 2 8 s: PIN loeschen
 
+// Display-Variante: 0 = 1,5" 128x128 (SH1107), 1 = altes 0,96" 128x64 (SSD1306)
+// Beim Bauen auf GitHub wird das automatisch fuer beide Varianten gesetzt.
+#ifndef DISPLAY_KLEIN
+#define DISPLAY_KLEIN 0
+#endif
+#define FW_VERSION "2.10.18"
+unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 #include <Wire.h>
 #include <Adafruit_DPS310.h>
 #include <U8g2lib.h>
@@ -130,7 +137,11 @@ const int PIN_TASTE1 = D0;
 const int PIN_TASTE2 = D1;
 
 Adafruit_DPS310 dps;
+#if DISPLAY_KLEIN
+U8G2_SSD1306_128X64_NONAME_F_HW_I2C anzeige(U8G2_R1, U8X8_PIN_NONE);   // altes 0,96" OLED 128x64, hochkant
+#else
 U8G2_SH1107_SEEED_128X128_F_HW_I2C anzeige(U8G2_R0, U8X8_PIN_NONE);   // 1,5" OLED 128x128
+#endif
 LSM6DS3 imu(I2C_MODE, 0x6A);
 
 // ---------- Zustand ----------
@@ -1144,6 +1155,352 @@ void zahlMitVorzeichen(char* text, int laenge, float wert) {
 unsigned long warnBis = 0;     // Akkuwarnung anzeigen bis
 char warnText[12] = "";
 
+#if DISPLAY_KLEIN
+// ---------- Anzeige 64 x 128 (altes 0,96" OLED 128x64, SSD1306, hochkant) ----------
+const int BR = 64;                     // Breite in Pixel (hochkant)
+const int HO = 128;                    // Hoehe in Pixel
+
+// Helligkeit in % -> Kontrastwert des Displays (quadratisch, damit es unten feiner geht)
+uint8_t kontrast() {
+  int h = constrain(HELLIGKEIT, 5, 100);
+  return (uint8_t)max(1, (255 * h * h) / 10000);
+}
+
+void displayAusrichten() {
+  anzeige.setDisplayRotation(DISPLAY_DREHEN ? U8G2_R3 : U8G2_R1);
+  anzeige.setContrast(kontrast());
+}
+
+int textMitte(const char* t) { return max(0, (BR - (int)anzeige.getUTF8Width(t)) / 2); }
+
+// 6 Balken unten links, gefuellt bis zur aktuellen Stufe
+void lautSymbol() {
+  for (int i = 0; i < LAUT_STUFEN; i++) {
+    int hoehe = 3 + i;
+    int x = 2 + i * 5;
+    if (i < lautStufe) anzeige.drawBox(x, HO - hoehe, 3, hoehe);
+    else               anzeige.drawPixel(x + 1, HO - 1);
+  }
+}
+
+// Linie Punkt fuer Punkt, nur sichtbare Punkte (negative Koordinaten sicher)
+void linieClip(int ax, int ay, int bx, int by, int xmin, int ymin, int xmax, int ymax) {
+  int dx = bx - ax, dy = by - ay;
+  int n = max(abs(dx), abs(dy));
+  if (n > 400) return;
+  for (int i = 0; i <= n; i++) {
+    int x = (n == 0) ? ax : ax + (dx * i + (dx >= 0 ? n / 2 : -n / 2)) / n;
+    int y = (n == 0) ? ay : ay + (dy * i + (dy >= 0 ? n / 2 : -n / 2)) / n;
+    if (x >= xmin && x <= xmax && y >= ymin && y <= ymax) anzeige.drawPixel(x, y);
+  }
+}
+const int PFEIL_ZONE = 46;
+void linieZ(int ax, int ay, int bx, int by) { linieClip(ax, ay, bx, by, 0, 0, BR - 1, PFEIL_ZONE - 1); }
+
+// Ein Pfeil (38 Pixel hoch). y = Oberkante, nachOben = Spitze oben
+void einPfeil(int y, bool nachOben) {
+  int sy = 0, by = 18, ey = 38;
+  if (!nachOben) { sy = 38; by = 20; ey = 0; }
+  sy += y; by += y; ey += y;
+  if (PFEIL_HOHL) {
+    linieZ(32, sy, 59, by);
+    linieZ(59, by, 43, by);
+    linieZ(43, by, 43, ey);
+    linieZ(43, ey, 20, ey);
+    linieZ(20, ey, 20, by);
+    linieZ(20, by, 4, by);
+    linieZ(4, by, 32, sy);
+  } else {
+    anzeige.drawTriangle(32, sy, 4, by, 60, by);
+    int oben = min(by, ey), unten = max(by, ey);
+    anzeige.drawBox(20, oben, 24, unten - oben + 1);
+  }
+}
+
+// Wandernde Pfeile im oberen Bereich (0..45)
+void pfeileZeichnen() {
+  float v = vJetzt();
+  static float pos = 0;
+  static unsigned long letzte = 0;
+  unsigned long jetzt = millis();
+  float dt = (jetzt - letzte) / 1000.0;
+  letzte = jetzt;
+  if (dt > 0.5) dt = 0;
+
+  if (!PFEIL_AN || fabs(v) < PFEIL_AB) return;
+
+  bool hoch = v > 0;
+  float tempo = min(PFEIL_MAX, PFEIL_TEMPO * (float)fabs(v));
+  const int ABSTAND = 46;
+  pos += tempo * dt;
+  while (pos >= ABSTAND) pos -= ABSTAND;
+
+  int versatz = (int)pos;
+  int start = hoch ? -versatz : versatz - ABSTAND;
+  anzeige.setClipWindow(0, 0, BR, PFEIL_ZONE);
+  for (int k = 0; k < 3; k++) einPfeil(start + k * ABSTAND + 4, hoch);
+  anzeige.setMaxClipWindow();
+}
+
+// Kleines Akku-Symbol (12 x 7 Pixel). Laedt: Fuellung laeuft durch. Unter 10 %: blinkt.
+void akkuSymbol(int x, int y) {
+  int p = akkuProzent();
+  bool blink = (millis() / 500) % 2;
+  if (!usbSteckt() && p < 10 && blink) return;
+  anzeige.drawFrame(x, y, 11, 7);
+  anzeige.drawBox(x + 11, y + 2, 1, 3);
+  int fuell = (p * 9 + 50) / 100;
+  if (usbSteckt() && laedt()) fuell = max(fuell, (int)(millis() / 400) % 10);
+  if (fuell > 0) anzeige.drawBox(x + 1, y + 1, fuell, 5);
+}
+
+// G-Anzeige: in der Spirale (ueber 1,5 g fuer 2 s) statt der Hoehe,
+// zurueck, wenn es 3 s lang unter 1,25 g liegt
+bool gModus = false;
+void gModusPruefen() {
+  static unsigned long seit = 0;
+  if (!G_AUTO || !imuOk) { gModus = false; seit = 0; return; }
+  bool wechseln = gModus ? (gWert < 1.25f) : (gWert > 1.5f);
+  if (!wechseln) { seit = 0; return; }
+  if (seit == 0) seit = millis();
+  if (millis() - seit >= (gModus ? 3000UL : 2000UL)) { gModus = !gModus; seit = 0; }
+}
+
+void bildZeichnen() {
+  float v = vJetzt();
+  char text[20];
+  anzeige.clearBuffer();
+
+  if (!sensorOk) {
+    anzeige.setFont(u8g2_font_6x10_tf);
+    anzeige.drawStr(4, 40, "DPS310");
+    anzeige.drawStr(4, 52, "fehlt");
+    return;
+  }
+
+  pfeileZeichnen();
+
+  // Steigwert, "invertiert": wo Pfeil ist, wird die Zahl dunkel
+  anzeige.setFontMode(1);
+  anzeige.setDrawColor(2);
+  zahlMitVorzeichen(text, sizeof(text), v);
+  anzeige.setFont(u8g2_font_logisoso18_tn);
+  int breite = anzeige.getStrWidth(text);
+  anzeige.drawStr((BR - breite) / 2, 26, text);
+  anzeige.setFont(u8g2_font_6x10_tf);
+  anzeige.drawStr(23, 38, "m/s");
+  anzeige.setDrawColor(1);
+  anzeige.setFontMode(0);
+
+  anzeige.drawHLine(0, PFEIL_ZONE, BR);
+
+  anzeige.setFont(u8g2_font_6x10_tf);
+  if (gModus) {
+    anzeige.drawUTF8(2, 58, "G-Last");
+    int g10 = (int)lroundf(gWert * 10);
+    snprintf(text, sizeof(text), "%d.%d g", g10 / 10, g10 % 10);
+  } else {
+    anzeige.drawUTF8(2, 58, "Höhe");
+    snprintf(text, sizeof(text), "%d m", (int)round(h));
+  }
+  if (!imuOk) anzeige.drawStr(38, 58, "!IMU");
+  anzeige.setFont(u8g2_font_9x15B_tf);
+  anzeige.drawStr(2, 74, text);
+
+  // Hoehe ueber Meer, Maximum, Flugzeit (klein)
+  anzeige.setFont(u8g2_font_6x10_tf);
+  if (gsDa()) snprintf(text, sizeof(text), "GS %d km/h", (int)lroundf(gsKmh));
+  else        snprintf(text, sizeof(text), "NN  %d m", (int)round(hoeheNN()));
+  anzeige.drawStr(2, 89, text);
+
+  if (gModus) {
+    int gm = (int)lroundf(gMaxFlug * 10);
+    snprintf(text, sizeof(text), "Gmax %d.%d", gm / 10, gm % 10);
+  } else if (flugGewesen) snprintf(text, sizeof(text), "Max %d m", (int)round(maxHoehe));
+  else                    snprintf(text, sizeof(text), "Max --");
+  anzeige.drawStr(2, 101, text);
+
+  if (flugGewesen) {
+    unsigned long min = flugDauerMs / 60000UL;
+    snprintf(text, sizeof(text), "Zeit %lu:%02lu", min / 60, min % 60);
+  } else {
+    snprintf(text, sizeof(text), "Zeit -:--");
+  }
+  anzeige.drawStr(2, 113, text);
+  if (imFlug && (millis() / 500) % 2) anzeige.drawDisc(60, 109, 2);   // blinkt im Flug
+
+  // Statuszeile: Lautstaerke, Akku, Bluetooth
+  if (lautStufe == 0)     anzeige.drawStr(2, 127, "stumm");
+  else if (bodenStumm())  anzeige.drawStr(2, 127, "Boden");
+  else                    lautSymbol();
+  akkuSymbol(35, 121);
+  if (Bluefruit.connected()) anzeige.drawStr(51, 127, "BT");
+
+  // Hinweise ueber allem: Akkuwarnung, Vario suchen
+  if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox("Akku", warnText);
+  else warnBis = 0;
+  if (suchenLaeuft() && (millis() / 300) % 2) hinweisBox("Hier!", "Taste=aus");
+}
+
+// Schwarze Schrift in weissem Kasten mitten im Bild
+void hinweisBox(const char* z1, const char* z2) {
+  anzeige.setDrawColor(1);
+  anzeige.drawBox(0, 50, BR, 34);
+  anzeige.setDrawColor(0);
+  anzeige.setFont(u8g2_font_6x10_tf);
+  anzeige.drawUTF8(textMitte(z1), 64, z1);
+  anzeige.drawUTF8(textMitte(z2), 78, z2);
+  anzeige.setDrawColor(1);
+}
+
+// Grosse Ladeanzeige. versatz verschiebt alles ein wenig (schont das Display)
+void ladeBild(int versatz) {
+  char text[16];
+  int p = akkuProzent();
+  anzeige.clearBuffer();
+  anzeige.setFont(u8g2_font_6x10_tf);
+  anzeige.drawUTF8(20 + versatz, 10, "Akku");
+
+  int x = 17 + versatz, y = 20;
+  anzeige.drawBox(x + 9, y - 4, 12, 4);
+  anzeige.drawFrame(x, y, 30, 60);
+  anzeige.drawFrame(x + 1, y + 1, 28, 58);
+  int fuell = p * 54 / 100;
+  if (usbSteckt() && laedt() && !akkuVoll) {
+    int extra = (millis() / 300) % 4 * 3;
+    fuell = min(54, fuell + extra);
+  }
+  if (fuell > 0) anzeige.drawBox(x + 3, y + 57 - fuell, 24, fuell);
+
+  if (akkuFehlt()) {
+    anzeige.drawUTF8(2 + versatz, 100, "kein Akku?");
+  } else {
+    anzeige.setFont(u8g2_font_logisoso18_tn);
+    snprintf(text, sizeof(text), "%d", p);
+    int b = anzeige.getStrWidth(text);
+    int xs = (BR - b - 8) / 2 + versatz;
+    anzeige.drawStr(xs, 104, text);
+    anzeige.setFont(u8g2_font_6x10_tf);
+    anzeige.drawStr(xs + b + 2, 104, "%");
+  }
+
+  anzeige.setFont(u8g2_font_6x10_tf);
+  if (akkuVoll)       anzeige.drawUTF8(20 + versatz, 116, "voll");
+  else if (laedt())   anzeige.drawUTF8(11 + versatz, 116, "lädt...");
+  else                anzeige.drawUTF8(2 + versatz, 116, "lädt nicht");
+  int mv = (int)(akkuV * 100 + 0.5);
+  snprintf(text, sizeof(text), "%d.%02d V", mv / 100, mv % 100);
+  anzeige.drawStr(14 + versatz, 127, text);
+}
+
+int naechsteZeile = 8;                 // 8 Zeilen zu je 8 Pixel (128 x 64 Display)
+
+void anzeigeWeiter() {
+  static unsigned long letztesBild = 0;
+  if (naechsteZeile >= 8) {
+    if (millis() - letztesBild >= ANZEIGE_MS) {
+      letztesBild = millis();
+      bildZeichnen();
+      naechsteZeile = 0;
+    }
+    return;
+  }
+  // je Aufruf 1 Zeile senden, damit das Messen nicht gebremst wird
+  anzeige.updateDisplayArea(0, naechsteZeile, 16, 1);
+  naechsteZeile++;
+}
+
+void meldung(const char* z1, const char* z2, const char* z3, const char* z4) {
+  anzeige.clearBuffer();
+  anzeige.setFont(u8g2_font_6x10_tf);
+  anzeige.drawUTF8(2, 40, z1);
+  anzeige.drawUTF8(2, 52, z2);
+  anzeige.drawUTF8(2, 76, z3);
+  anzeige.drawUTF8(2, 88, z4);
+  anzeige.sendBuffer();
+  naechsteZeile = 8;
+}
+
+// Einschaltbild: oben "Sweef", darunter Begruessung und ID
+void startBild(const char* unten1, const char* unten2) {
+  anzeige.clearBuffer();
+  anzeige.setFont(u8g2_font_9x15B_tf);
+  anzeige.drawStr(textMitte("Sweef"), 16, "Sweef");
+  anzeige.drawHLine(8, 21, 48);
+  anzeige.setFont(u8g2_font_6x10_tf);
+  char tmp[100];
+  strncpy(tmp, gruss, sizeof(tmp) - 1);
+  tmp[sizeof(tmp) - 1] = 0;
+  char* rest = tmp;
+  char* z;
+  int y = 36, zeilen = 0;
+  while (zeilen < 4 && (z = strtok_r(rest, "|", &rest)) != NULL) {
+    anzeige.drawUTF8(textMitte(z), y, z);
+    y += 11;
+    zeilen++;
+  }
+  char id[12];
+  snprintf(id, sizeof(id), "ID %s", geraeteId);
+  anzeige.drawStr(textMitte(id), 92, id);
+  anzeige.drawUTF8(textMitte(unten1), 112, unten1);
+  anzeige.drawUTF8(textMitte(unten2), 124, unten2);
+  anzeige.sendBuffer();
+  naechsteZeile = 8;
+}
+
+void warteMessend(unsigned long ms) {
+  unsigned long start = millis();
+  while (millis() - start < ms) messen();
+}
+
+// Zeigt, ob alle Teile da sind. Bei Fehler: tiefe Pieps, laenger anzeigen.
+void selbsttest() {
+  struct { const char* name; bool ok; } t[] = {
+    {"Druck", sensorOk}, {"Lage", imuOk}, {"Daten", flashOk}
+  };
+  bool fehler = false;
+  anzeige.clearBuffer();
+  anzeige.setFont(u8g2_font_6x10_tf);
+  anzeige.drawStr(2, 12, "Selbsttest");
+  anzeige.drawHLine(0, 16, BR);
+  for (int i = 0; i < 3; i++) {
+    int y = 32 + i * 13;
+    anzeige.drawStr(2, y, t[i].name);
+    const char* e = t[i].ok ? "OK" : "FEHLT";
+    anzeige.drawStr(62 - anzeige.getStrWidth(e), y, e);
+    if (!t[i].ok) fehler = true;
+  }
+  char a[12];
+  if (akkuFehlt()) snprintf(a, sizeof(a), "--");
+  else             snprintf(a, sizeof(a), "%d%%", akkuProzent());
+  anzeige.drawStr(2, 71, "Akku");
+  anzeige.drawStr(62 - anzeige.getStrWidth(a), 71, a);
+  anzeige.drawHLine(0, 80, BR);
+  if (fehler) {
+    anzeige.drawStr(2, 98, "Fehler!");
+    if (!flashOk) {
+      char k[12];
+      snprintf(k, sizeof(k), "%02X %02X %02X", flashKennung[0], flashKennung[1], flashKennung[2]);
+      anzeige.drawStr(2, 112, "Daten-ID");
+      anzeige.drawStr(2, 124, k);
+    } else {
+      anzeige.drawStr(2, 112, "Bitte");
+      anzeige.drawUTF8(2, 124, "prüfen");
+    }
+  } else {
+    anzeige.drawStr(2, 104, "alles OK");
+  }
+  anzeige.sendBuffer();
+  naechsteZeile = 8;
+  if (fehler) {
+    for (int i = 0; i < 3; i++) { kurzerPiep(400, 150); delay(100); }
+    warteMessend(4000);
+  } else {
+    warteMessend(1200);
+  }
+}
+
+#else  // grosses Display
 // ---------- Anzeige 128 x 128 (1,5" OLED, SH1107) ----------
 const int BR = 128;                    // Breite in Pixel
 const int HO = 128;                    // Hoehe in Pixel
@@ -1397,6 +1754,10 @@ void bildZeichnen() {
   anzeige.drawStr(2, 114, text);
   if (imFlug && (millis() / 500) % 2) anzeige.drawDisc(70, 110, 2);   // blinkt im Flug
   if (!imuOk) anzeige.drawStr(96, 114, "!IMU");
+  else if (gsDa()) {                         // Geschwindigkeit ueber Grund (Handy-GPS)
+    snprintf(text, sizeof(text), "%d km/h", (int)lroundf(gsKmh));
+    anzeige.drawStr(126 - anzeige.getStrWidth(text), 114, text);
+  }
 
   anzeige.drawHLine(0, 117, BR);
 
@@ -1595,6 +1956,8 @@ void selbsttest() {
     warteMessend(2000);
   }
 }
+
+#endif  // DISPLAY_KLEIN
 
 // =================================================================
 // Ein / Aus
@@ -1928,6 +2291,10 @@ void befehlAusfuehren(char* text, bool mitWirkung) {
       } else if (mitWirkung && strcmp(teil, "suchen") == 0) {  // Vario suchen
         suchenBis = millis() + 20000;
         if (suchenBis == 0) suchenBis = 1;
+      } else if (mitWirkung && strcmp(teil, "dfu") == 0) {     // Firmware-Update per Bluetooth
+        if (imFlug) { antwort("U,0"); continue; }
+        antwort("U,1");
+        updateModusAb = millis() + 400;        // kurz warten, damit die Antwort ankommt
       } else if (mitWirkung && strcmp(teil, "suchen_aus") == 0) {
         if (suchenBis) suchenBis = millis();
       }
@@ -2011,7 +2378,21 @@ void einstLaden() {
 volatile bool befehlDa = false;
 char befehlPuffer[201];
 
+// Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
+volatile float gsKmh = -1;
+volatile unsigned long gsZeit = 0;
+bool gsDa() { return gsZeit != 0 && millis() - gsZeit < 5000 && gsKmh >= 0; }
+
 void befehlEmpfangen(uint16_t verbindung, BLECharacteristic* chr, uint8_t* daten, uint16_t laenge) {
+  if (laenge > 3 && laenge < 12 && memcmp(daten, "gs=", 3) == 0) {   // GPS-Tempo: sofort merken
+    char t[12];
+    memcpy(t, daten + 3, laenge - 3);
+    t[laenge - 3] = 0;
+    gsKmh = atof(t);
+    gsZeit = millis();
+    if (gsZeit == 0) gsZeit = 1;
+    return;
+  }
   if (befehlDa) return;                       // vorheriger noch nicht fertig
   if (laenge > 200) laenge = 200;
   memcpy(befehlPuffer, daten, laenge);
@@ -2023,8 +2404,8 @@ void befehlEmpfangen(uint16_t verbindung, BLECharacteristic* chr, uint8_t* daten
 void infoAnHandy() {
   char buf[200], name[24];
   geraeteName(name, sizeof(name));
-  int n = snprintf(buf, sizeof(buf), "id=%s;nm=%s;zs=%s;pin=%d;ok=%d;fw=2.10",
-                   geraeteId, name, nameZusatz, pinAktiv() ? 1 : 0, gesperrt() ? 0 : 1);
+  int n = snprintf(buf, sizeof(buf), "id=%s;nm=%s;zs=%s;pin=%d;ok=%d;fw=" FW_VERSION ";dv=%c",
+                   geraeteId, name, nameZusatz, pinAktiv() ? 1 : 0, gesperrt() ? 0 : 1, DISPLAY_KLEIN ? 'k' : 'g');
   if (!gesperrt()) n += snprintf(buf + n, sizeof(buf) - n, ";gt=%s", gruss);
   chrInfo.write(buf, n);
   if (Bluefruit.connected()) chrInfo.notify(buf, n);
@@ -2557,4 +2938,18 @@ void loop() {
   akkuAktualisieren();
   akkuWarnen();
   if (speichernUm && (long)(millis() - speichernUm) >= 0) lautSpeichern();
+  if (updateModusAb && (long)(millis() - updateModusAb) >= 0) updateModusStarten();
+}
+
+// Firmware-Update per Bluetooth: Einstellungen sichern, dann in den Bootloader.
+// Die App spielt danach die neue Firmware auf, das Vario startet von selbst neu.
+void updateModusStarten() {
+  updateModusAb = 0;
+  tonAus();
+  verstaerkerAus();
+  if (einstSpeichernUm) einstSpeichern();
+  if (speichernUm) lautSpeichern();
+  meldung("Update", "per Handy", "bitte", "warten...");
+  delay(300);
+  enterOTADfu();                 // startet den Bootloader im Bluetooth-Update-Modus
 }

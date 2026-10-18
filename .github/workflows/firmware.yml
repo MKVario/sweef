@@ -46,7 +46,11 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
           # Fehler als Hinweise sichtbar machen
-          grep -E "error|Error" compile.log | head -20 | while IFS= read -r z; do echo "::error::$z"; done
+          melde() { z="${2//%/%25}"; z="${z//$'\r'/}"; z="$(echo "$z" | sed 's/^[[:space:]]*//' | cut -c1-300)"; [ -n "$z" ] && echo "::$1::$z"; return 0; }
+          if [ $status -ne 0 ]; then
+            grep -iE "undefined|error" compile.log | head -8 | while IFS= read -r z; do melde error "$z"; done
+            tail -6 compile.log | while IFS= read -r z; do melde warning "$z"; done
+          fi
           grep -E "Sketch uses|Global variables" compile.log | while IFS= read -r z; do echo "::notice::${{ matrix.display }}: $z"; done
           ls build | while IFS= read -r z; do echo "::notice::Datei: $z"; done
           exit $status

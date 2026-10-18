@@ -64,7 +64,7 @@ object VarioUpdate {
      */
     fun starten(ctx: Context, variante: String, meldung: (String, String, Int) -> Unit) {
         if (laeuft) return
-        val adr = VarioBle.adresse
+        val adr = VarioBle.letzteAdresse()
         // Vario nicht verbunden: vielleicht steckt es noch im Update-Modus
         // (abgebrochenes Update) - dann direkt dort weitermachen.
         val schonImUpdateModus = !VarioBle.bereit
@@ -116,13 +116,14 @@ object VarioUpdate {
     private fun bootloaderSuchen(ctx: Context, adr: String?, datei: File, meldung: (String, String, Int) -> Unit) {
         meldung("info", "Suche Vario im Update-Modus …", 0)
         val plus1 = if (adr != null) naechsteAdresse(adr) else "-"
-        VarioBle.suchen(8000, { n -> true }) { liste ->
+        VarioBle.suchen(10000, true, { true }) { liste ->
             var ziel: JSONObject? = null
             for (i in 0 until liste.length()) {
                 val d = liste.getJSONObject(i)
                 val id = d.getString("id").uppercase()
                 val n = d.optString("name")
-                if (n.contains("DFU", true) || (adr != null && (id == adr.uppercase() || id == plus1))) { ziel = d; break }
+                if (d.optBoolean("dfu") || n.contains("DFU", true) ||
+                    (adr != null && (id == adr.uppercase() || id == plus1))) { ziel = d; break }
             }
             // nicht gesehen: trotzdem mit der alten Adresse versuchen
             if (ziel == null && adr == null) {

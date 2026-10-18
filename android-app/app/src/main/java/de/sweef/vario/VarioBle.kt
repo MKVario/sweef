@@ -58,7 +58,16 @@ object VarioBle {
     private val wartende = mutableListOf<(Boolean, String?) -> Unit>()
     private val verbindenZeitlimit = Runnable { verbindenFehlgeschlagen("Zeitüberschreitung") }
 
-    fun init(c: Context) { ctx = c.applicationContext }
+    fun init(c: Context) {
+        ctx = c.applicationContext
+        if (adresse == null) adresse = ctx.getSharedPreferences("sweef", Context.MODE_PRIVATE).getString("letztes_vario", null)
+    }
+
+    /** Adresse des zuletzt verbundenen Varios (fuer ein abgebrochenes Update) */
+    fun letzteAdresse(): String? = adresse
+        ?: ctx.getSharedPreferences("sweef", Context.MODE_PRIVATE).getString("letztes_vario", null)
+
+    val DFU_DIENST: UUID = UUID.fromString("00001530-1212-efde-1523-785feabcd123")
 
     private fun adapter(): BluetoothAdapter? =
         (ctx.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -68,17 +77,21 @@ object VarioBle {
     // ------------------------------------------------------------------
     private var suchCallback: ScanCallback? = null
 
-    fun suchen(dauerMs: Long, nurName: (String) -> Boolean, fertig: (JSONArray) -> Unit) {
+    fun suchen(dauerMs: Long, nurName: (String) -> Boolean, fertig: (JSONArray) -> Unit) =
+        suchen(dauerMs, false, nurName, fertig)
+
+    fun suchen(dauerMs: Long, alle: Boolean, nurName: (String) -> Boolean, fertig: (JSONArray) -> Unit) {
         val scanner = adapter()?.bluetoothLeScanner
         if (scanner == null) { fertig(JSONArray()); return }
         val gefunden = LinkedHashMap<String, JSONObject>()
         val cb = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, r: ScanResult) {
-                val n = r.scanRecord?.deviceName ?: r.device.name ?: return
-                if (!nurName(n)) return
+                val n = r.scanRecord?.deviceName ?: r.device.name
+                if (!alle && (n == null || !nurName(n))) return
+                val dfu = r.scanRecord?.serviceUuids?.any { it.uuid == DFU_DIENST } == true
                 handler.post {
                     gefunden[r.device.address] = JSONObject()
-                        .put("id", r.device.address).put("name", n).put("rssi", r.rssi)
+                        .put("id", r.device.address).put("name", n ?: "").put("rssi", r.rssi).put("dfu", dfu)
                 }
             }
         }
@@ -200,6 +213,7 @@ object VarioBle {
                 }
                 handler.removeCallbacks(verbindenZeitlimit)
                 dienst = d; bereit = true; verbindet = false
+                ctx.getSharedPreferences("sweef", Context.MODE_PRIVATE).edit().putString("letztes_vario", adresse).apply()
                 val w = wartende.toList(); wartende.clear()
                 w.forEach { it(true, null) }
                 ereignis?.invoke("verbunden", JSONObject().put("id", adresse))

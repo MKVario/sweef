@@ -218,6 +218,21 @@ class MainActivity : Activity() {
             }
         }
 
+        /** Neueste Versionen auf GitHub: {"app":5,"appUrl":"…","firmware":"2.10.19","eigene":4} */
+        @JavascriptInterface fun versionenPruefen(id: Int) = runOnUiThread {
+            AppUpdate.pruefen { j ->
+                if (j == null) fertig(id, false, "Keine Internetverbindung?")
+                else fertig(id, true, j.put("eigene", AppUpdate.eigeneNummer(this@MainActivity)).toString())
+            }
+        }
+
+        @JavascriptInterface fun appInstallieren(url: String) = runOnUiThread {
+            AppUpdate.installieren(this@MainActivity, url) { text, ende ->
+                zurJs("_ereignis", JSONObject.quote("appupdate"),
+                    JSONObject().put("text", text).put("ende", ende).toString())
+            }
+        }
+
         /** Datei in "Download/Sweef" speichern (Sicherung, CSV) */
         @JavascriptInterface fun speichern(name: String, inhalt: String, typ: String): Boolean {
             return try {

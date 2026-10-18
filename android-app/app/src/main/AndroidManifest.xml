@@ -18,6 +18,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Firmware-Updates laden -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- neue App-Versionen installieren -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
@@ -46,6 +48,16 @@
             android:name=".VarioService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|location" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="de.sweef.vario.dateien"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/dateien" />
+        </provider>
 
         <service
             android:name=".DfuService"

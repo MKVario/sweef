@@ -140,6 +140,10 @@
         if (!jsVerbunden && aktuell && typeof einrichten === "function" && !absichtlichGetrennt) {
           einrichten().catch(() => {});
         }
+      } else if (art === "appupdate") {
+        const t = document.getElementById("hinweisText");
+        if (t) t.textContent = d.text;
+        if (d.ende) melden(d.text);
       } else if (art === "update") {
         updateZeigen(d);
       }
@@ -189,6 +193,8 @@
     document.getElementById("fwSuchen").onclick = fwSuchen;
     document.getElementById("fwStart").onclick = fwStarten;
     setInterval(statusZeigen, 1000);
+    setTimeout(versionenPruefen, 3000);               // kurz nach dem Start
+    setInterval(versionenPruefen, 6 * 3600 * 1000);    // und alle 6 Stunden
     statusZeigen();
   }
 
@@ -279,6 +285,51 @@
       melden(d.text);
     }
   }
+
+  // ---------------- Neue Versionen (App und Firmware) ----------------
+  let neueste = null;          // {app, appUrl, firmware, eigene}
+  let fwHinweisWeg = false;
+
+  function hinweisLeiste(text, knopf, aktion, wegKlick) {
+    let l = document.getElementById("hinweisLeiste");
+    if (!l) {
+      l = document.createElement("div");
+      l.id = "hinweisLeiste";
+      l.style.cssText = "position:sticky;top:0;z-index:50;background:#0b7480;color:#fff;padding:10px 12px;border-radius:10px;margin:8px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap";
+      const ziel = document.querySelector(".reiter");
+      if (ziel) ziel.parentNode.insertBefore(l, ziel); else document.body.prepend(l);
+    }
+    l.innerHTML = "";
+    const t = document.createElement("span");
+    t.id = "hinweisText"; t.style.flex = "1"; t.textContent = text;
+    const b = document.createElement("button");
+    b.className = "primary"; b.textContent = knopf; b.onclick = aktion;
+    const x = document.createElement("button");
+    x.textContent = "Später"; x.onclick = () => { l.remove(); if (wegKlick) wegKlick(); };
+    l.append(t, b, x);
+  }
+
+  async function versionenPruefen() {
+    try { neueste = JSON.parse(await rufen("versionenPruefen")); } catch (e) { return; }
+    if (neueste.app > 0 && neueste.app > neueste.eigene && neueste.appUrl) {
+      hinweisLeiste("Neue Sweef-App 1.0." + neueste.app + " ist da.", "Installieren",
+        () => N.appInstallieren(neueste.appUrl));
+    }
+  }
+
+  // Firmware: sobald ein Vario verbunden ist, Version vergleichen
+  setInterval(() => {
+    if (!neueste || fwHinweisWeg || !N.istVerbunden()) return;
+    if (document.getElementById("hinweisLeiste")) return;     // App-Hinweis hat Vorrang
+    const v = (typeof varioInfoDaten === "object" && varioInfoDaten) ? varioInfoDaten : {};
+    if (!v.fw || !v.dv || !neueste.firmware) return;
+    if (neuer(neueste.firmware, v.fw)) {
+      fwHinweisWeg = true;
+      hinweisLeiste("Neue Vario-Firmware " + neueste.firmware + " (auf dem Vario: " + v.fw + ").", "Ansehen",
+        () => { const l = document.getElementById("hinweisLeiste"); if (l) l.remove();
+                if (typeof reiter === "function") reiter("geraet"); fwSuchen(); });
+    }
+  }, 3000);
 
   // Hinweis unten auf der Seite anpassen
   function hinweisAnpassen() {

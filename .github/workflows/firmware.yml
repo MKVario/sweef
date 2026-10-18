@@ -2,10 +2,15 @@ name: Firmware bauen
 
 on:
   push:
+    tags: ['v*']
+    branches: ['**']
     paths:
       - 'firmware/**'
       - '.github/workflows/firmware.yml'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   bauen:
@@ -65,3 +70,18 @@ jobs:
           path: |
             sweef_firmware_${{ matrix.display }}.zip
             sweef_firmware_${{ matrix.display }}.hex
+
+      - name: Versionsdatei
+        if: matrix.display == 'gross'
+        run: |
+          grep -oP '#define FW_VERSION "\K[^"]+' firmware/sweef_vario/sweef_vario.ino > version.txt
+          echo "::notice::Firmware-Version $(cat version.txt)"
+
+      - name: In Release hochladen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            sweef_firmware_${{ matrix.display }}.zip
+            sweef_firmware_${{ matrix.display }}.hex
+            ${{ matrix.display == 'gross' && 'version.txt' || '' }}

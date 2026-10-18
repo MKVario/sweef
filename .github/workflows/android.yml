@@ -1,0 +1,76 @@
+name: App bauen
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'android-app/**'
+      - 'index.html'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Web-Oberflaeche in die App kopieren
+        run: |
+          W=android-app/app/src/main/assets/www
+          mkdir -p $W
+          cp index.html manifest.webmanifest icon-192.png icon-512.png $W/
+          cp android-app/web/sweef-bridge.js $W/
+          sed -i 's#</body>#<script src="sweef-bridge.js"></script>\n</body>#' $W/index.html
+          grep -c "sweef-bridge.js" $W/index.html
+
+      - name: Schluessel pruefen
+        env:
+          SWEEF_KEYSTORE_PW: ${{ secrets.SWEEF_KEYSTORE_PW }}
+        run: |
+          if [ -z "$SWEEF_KEYSTORE_PW" ]; then
+            echo "::error::Das Geheimnis SWEEF_KEYSTORE_PW fehlt (GitHub > Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+
+      - name: APK bauen
+        shell: bash
+        env:
+          SWEEF_KEYSTORE_PW: ${{ secrets.SWEEF_KEYSTORE_PW }}
+        working-directory: android-app
+        run: |
+          set +e
+          gradle --no-daemon assembleRelease 2>&1 | tee bau.log
+          status=${PIPESTATUS[0]}
+          set -e
+          grep -E "^e: |error:|What went wrong|Could not|> " bau.log | grep -v "^> Task" | head -25 | while IFS= read -r z; do echo "::error::$z"; done
+          exit $status
+
+      - name: APK umbenennen
+        run: |
+          cp android-app/app/build/outputs/apk/release/app-release.apk sweef-app.apk
+          echo "::notice::APK $(du -h sweef-app.apk | cut -f1) gebaut"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sweef-app
+          path: sweef-app.apk
+
+      - name: In Release hochladen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sweef-app.apk

@@ -1,0 +1,5 @@
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/app/src/main/assets/www/
+android-app/local.properties

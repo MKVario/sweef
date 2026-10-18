@@ -1,0 +1,53 @@
+name: Firmware bauen
+
+on:
+  push:
+    paths:
+      - 'firmware/**'
+      - '.github/workflows/firmware.yml'
+  workflow_dispatch:
+
+jobs:
+  bauen:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        display: [gross, klein]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: arduino-cli installieren
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Board-Paket und Bibliotheken
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://files.seeedstudio.com/arduino/package_seeeduino_boards_index.json
+          arduino-cli core update-index
+          arduino-cli core install Seeeduino:nrf52
+          arduino-cli board listall | grep -i xiao || true
+          arduino-cli lib install "Adafruit DPS310" "U8g2" "Seeed Arduino LSM6DS3" "Adafruit SPIFlash"
+          pip install adafruit-nrfutil
+
+      - name: Kompilieren
+        run: |
+          if [ "${{ matrix.display }}" = "klein" ]; then FLAG="-DDISPLAY_KLEIN=1"; else FLAG="-DDISPLAY_KLEIN=0"; fi
+          arduino-cli compile --fqbn Seeeduino:nrf52:xiaonRF52840Sense \
+            --build-property "compiler.cpp.extra_flags=$FLAG" \
+            --output-dir build firmware/sweef_vario
+          ls -la build
+
+      - name: Update-Datei (DFU) erzeugen
+        run: |
+          HEX=$(ls build/*.hex | head -1)
+          adafruit-nrfutil dfu genpkg --dev-type 0x0052 --sd-req 0x0123 --application "$HEX" sweef_firmware_${{ matrix.display }}.zip
+          cp "$HEX" sweef_firmware_${{ matrix.display }}.hex
+          ls -la *.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sweef_firmware_${{ matrix.display }}
+          path: |
+            sweef_firmware_${{ matrix.display }}.zip
+            sweef_firmware_${{ matrix.display }}.hex

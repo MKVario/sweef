@@ -65,7 +65,9 @@ object VarioUpdate {
     fun starten(ctx: Context, variante: String, meldung: (String, String, Int) -> Unit) {
         if (laeuft) return
         val adr = VarioBle.adresse
-        if (adr == null || !VarioBle.bereit) { meldung("fehler", "Erst mit dem Vario verbinden", 0); return }
+        // Vario nicht verbunden: vielleicht steckt es noch im Update-Modus
+        // (abgebrochenes Update) - dann direkt dort weitermachen.
+        val schonImUpdateModus = !VarioBle.bereit
         laeuft = true
         val datei = File(ctx.cacheDir, "sweef_firmware.zip")
         meldung("info", "Lade Firmware …", 0)
@@ -77,7 +79,13 @@ object VarioUpdate {
                 handler.post { laeuft = false; meldung("fehler", "Firmware nicht geladen: ${e.message}", 0) }
                 return@thread
             }
-            handler.post { bootloaderStarten(ctx, adr, datei, meldung) }
+            handler.post {
+                if (schonImUpdateModus) {
+                    VarioBle.gesperrt = true
+                    VarioBle.trennen()
+                    bootloaderSuchen(ctx, adr, datei, meldung)
+                } else bootloaderStarten(ctx, adr!!, datei, meldung)
+            }
         }
     }
 
@@ -105,24 +113,29 @@ object VarioUpdate {
         return teile.joinToString(":") { String.format("%02X", it) }
     }
 
-    private fun bootloaderSuchen(ctx: Context, adr: String, datei: File, meldung: (String, String, Int) -> Unit) {
+    private fun bootloaderSuchen(ctx: Context, adr: String?, datei: File, meldung: (String, String, Int) -> Unit) {
         meldung("info", "Suche Vario im Update-Modus …", 0)
-        val plus1 = naechsteAdresse(adr)
+        val plus1 = if (adr != null) naechsteAdresse(adr) else "-"
         VarioBle.suchen(8000, { n -> true }) { liste ->
             var ziel: JSONObject? = null
             for (i in 0 until liste.length()) {
                 val d = liste.getJSONObject(i)
                 val id = d.getString("id").uppercase()
                 val n = d.optString("name")
-                if (id == adr.uppercase() || id == plus1 || n.contains("DFU", true)) { ziel = d; break }
+                if (n.contains("DFU", true) || (adr != null && (id == adr.uppercase() || id == plus1))) { ziel = d; break }
             }
             // nicht gesehen: trotzdem mit der alten Adresse versuchen
+            if (ziel == null && adr == null) {
+                laeuft = false; VarioBle.gesperrt = false
+                meldung("fehler", "Kein Vario im Update-Modus gefunden", 0)
+                return@suchen
+            }
             val z: JSONObject = ziel ?: JSONObject().put("id", adr).put("name", "Sweef")
             aufspielen(ctx, z.getString("id"), z.optString("name"), adr, datei, meldung)
         }
     }
 
-    private fun aufspielen(ctx: Context, ziel: String, name: String, alteAdr: String, datei: File,
+    private fun aufspielen(ctx: Context, ziel: String, name: String, alteAdr: String?, datei: File,
                            meldung: (String, String, Int) -> Unit) {
         val hoerer = object : DfuProgressListenerAdapter() {
             override fun onDfuProcessStarting(a: String) { meldung("info", "Verbinde …", 0) }
@@ -148,18 +161,21 @@ object VarioUpdate {
             .setDeviceName(name)
             .setKeepBond(false)
             .setForeground(true)
+            // Der (alte) Adafruit-Bootloader verkraftet nur kleine Pakete:
+            // MTU 23 und nach wenigen Paketen eine Quittung
+            .disableMtuRequest()
             .setPacketsReceiptNotificationsEnabled(true)
-            .setPacketsReceiptNotificationsValue(8)
+            .setPacketsReceiptNotificationsValue(4)
             .setZip(datei.absolutePath)
             .start(ctx, DfuService::class.java)
     }
 
-    private fun ende(ctx: Context, hoerer: DfuProgressListenerAdapter, alteAdr: String) {
+    private fun ende(ctx: Context, hoerer: DfuProgressListenerAdapter, alteAdr: String?) {
         DfuServiceListenerHelper.unregisterProgressListener(ctx, hoerer)
         laeuft = false
         VarioBle.gesperrt = false
         // nach dem Neustart des Varios automatisch wieder verbinden
-        handler.postDelayed({
+        if (alteAdr != null) handler.postDelayed({
             VarioBle.verbinden(alteAdr, null) { _, _ -> }
         }, 6000)
     }

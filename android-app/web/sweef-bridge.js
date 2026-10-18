@@ -219,14 +219,18 @@
     const info = document.getElementById("fwInfo");
     const start = document.getElementById("fwStart");
     start.hidden = true;
+    start.textContent = "Jetzt aktualisieren";
     info.textContent = "Suche …";
     try { verfuegbar = await rufen("neuesteFirmware"); }
     catch (e) { info.textContent = "Keine Verbindung zum Internet."; return; }
     const v = (typeof varioInfoDaten === "object" && varioInfoDaten) ? varioInfoDaten : {};
     if (!N.istVerbunden() || !v.fw) {
-      info.textContent = "Neueste Firmware: " + verfuegbar + ". Zum Aktualisieren erst mit dem Vario verbinden.";
+      info.textContent = "Neueste Firmware: " + verfuegbar + ". Zum Aktualisieren mit dem Vario verbinden. Hängt ein Vario im Update-Modus, kannst du es hier direkt neu bespielen.";
+      start.hidden = false;
+      start.textContent = "Vario im Update-Modus bespielen";
       return;
     }
+    dvMerken();
     if (!v.dv) {
       info.textContent = "Auf dem Vario ist " + v.fw + ". Diese Version braucht einmal ein Update per USB-Kabel – danach geht es per Bluetooth.";
       return;
@@ -241,13 +245,23 @@
     }
   }
 
-  function fwStarten() {
+  function dvMerken() {
     const v = (typeof varioInfoDaten === "object" && varioInfoDaten) ? varioInfoDaten : {};
-    if (typeof entsperrt !== "undefined" && !entsperrt) { melden("Erst verbinden und entsperren"); return; }
-    if (!confirm("Firmware jetzt aufspielen? Das Vario startet dabei neu.")) return;
+    if (v.dv) try { localStorage.setItem("sweefDv", v.dv); } catch (e) {}
+    try { return v.dv || localStorage.getItem("sweefDv") || "g"; } catch (e) { return v.dv || "g"; }
+  }
+
+  function fwStarten() {
+    const dv = dvMerken();
+    if (N.istVerbunden()) {
+      if (typeof entsperrt !== "undefined" && !entsperrt) { melden("Erst entsperren"); return; }
+      if (!confirm("Firmware jetzt aufspielen? Das Vario startet dabei neu.")) return;
+    } else {
+      if (!confirm("Kein Vario verbunden. Hängt ein Vario noch im Update-Modus („Update per Handy“ auf dem Display)? Dann jetzt das Update dort fortsetzen?")) return;
+    }
     document.getElementById("fwStart").hidden = true;
     document.getElementById("fwSuchen").disabled = true;
-    N.updateStarten(v.dv === "k" ? "k" : "g");
+    N.updateStarten(dv === "k" ? "k" : "g");
   }
 
   function updateZeigen(d) {

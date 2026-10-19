@@ -101,6 +101,18 @@ object Startplaetze {
             .put("hoehe", p.hoehe).put("eigen", p.eigen).put("m", m).put("richtungen", p.richtungen).toString()
     }
 
+    /** die naechsten Startplaetze aus der Liste, sortiert nach Entfernung (lat/lon NaN = nach Name) */
+    fun listeJson(lat: Double, lon: Double, max: Int): String {
+        val a = JSONArray()
+        val sortiert = if (lat.isNaN()) pge.sortedBy { it.name.lowercase() }.map { it to -1.0 }
+                       else pge.map { it to abstandM(lat, lon, it.lat, it.lon) }.sortedBy { it.second }
+        sortiert.take(max).forEach { (p, m) ->
+            a.put(JSONObject().put("id", p.id).put("name", p.name).put("lat", p.lat).put("lon", p.lon)
+                .put("hoehe", p.hoehe).put("m", m).put("richtungen", p.richtungen))
+        }
+        return a.toString()
+    }
+
     // ---------------- automatisch fragen (aus dem GPS im Dienst) ----------------
     fun pruefen(lat: Double, lon: Double, genau: Float) {
         if (!::ctx.isInitialized || !fragenAn() || !VarioBle.bereit || !frei) return

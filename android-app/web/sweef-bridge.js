@@ -234,7 +234,12 @@
       <summary>Startplätze aus dem Internet</summary>
       <label class="schalter"><span><b>Vario fragt am Startplatz</b><small>Steht das Vario am Boden in der Nähe eines Startplatzes, fragt es, ob dessen Höhe übernommen werden soll (T1 = Ja, T2 = Nein).</small></span><input type="checkbox" class="switch" id="spFragen"></label>
       <p class="note" id="pgeInfo" style="margin:6px 0"></p>
-      <div class="knopfreihe"><button id="pgeLaden">Startplätze im Umkreis von 150 km laden</button></div>
+      <div class="knopfreihe"><button id="pgeLaden">Startplätze im Umkreis von 150 km laden</button><button id="pgeZeigen">Liste anzeigen</button></div>
+      <div id="pgeListeBox" hidden>
+        <input id="pgeSuche" placeholder="Suchen, z. B. Wilderness" autocomplete="off" style="width:100%;font:500 1rem var(--f-body);padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);margin:4px 0 8px">
+        <ul class="splist" id="pgeListe"></ul>
+        <p class="note" id="pgeListeInfo" style="margin:6px 0"></p>
+      </div>
       <p class="note" style="margin:0 0 8px">Vorher laden, solange du Internet hast – danach geht es auch ohne. Daten: ParaglidingEarth (CC BY-SA). Höhen können ungenau sein: bitte beim ersten Mal prüfen.</p>`;
     const vor = document.getElementById("spVerwalten");
     sp.insertBefore(d, vor);
@@ -242,8 +247,57 @@
     sw.checked = N.spFragenAn();
     sw.onchange = () => N.spFragenSetzen(sw.checked);
     document.getElementById("pgeLaden").onclick = pgeLaden;
+    document.getElementById("pgeZeigen").onclick = () => {
+      const box = document.getElementById("pgeListeBox");
+      box.hidden = !box.hidden;
+      document.getElementById("pgeZeigen").textContent = box.hidden ? "Liste anzeigen" : "Liste ausblenden";
+      if (!box.hidden) pgeListe();
+    };
+    document.getElementById("pgeSuche").oninput = () => pgeListeZeigen();
     pgeInfo();
   }
+  // Liste der geladenen Startplaetze, nach Entfernung sortiert
+  let pgeDaten = [], pgeOrt = null;
+  function pgeListe() {
+    pgeDaten = JSON.parse(N.spListe(NaN, NaN, 3000) || "[]");    // erst nach Name
+    pgeListeZeigen();
+    navigator.geolocation.getCurrentPosition(p => {
+      pgeOrt = { lat: p.coords.latitude, lon: p.coords.longitude };
+      pgeDaten = JSON.parse(N.spListe(pgeOrt.lat, pgeOrt.lon, 3000) || "[]");
+      pgeListeZeigen();
+    }, () => {}, { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
+  }
+  function pgeListeZeigen() {
+    const ul = document.getElementById("pgeListe");
+    if (!ul) return;
+    const such = (document.getElementById("pgeSuche").value || "").trim().toLowerCase();
+    const treffer = pgeDaten.filter(x => !such || x.name.toLowerCase().includes(such));
+    const zeigen = treffer.slice(0, 60);
+    const e = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const km = m => m < 0 ? "" : m < 1000 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(m < 10000 ? 1 : 0).replace(".", ",") + " km";
+    ul.innerHTML = "";
+    zeigen.forEach(x => {
+      const li = document.createElement("li");
+      const wind = x.richtungen ? "Wind " + x.richtungen.replace(/\+/g, "★") : "";
+      li.innerHTML = `<span>${e(x.name)} · ${Math.round(x.hoehe)} m<br><span class="klein">${[km(x.m), wind].filter(Boolean).join(" · ")}</span></span>
+        <button class="spKarte">Karte</button><button class="merken">Speichern</button>`;
+      li.querySelector(".spKarte").onclick = () => { location.href = "https://www.google.com/maps/search/?api=1&query=" + x.lat + "," + x.lon; };
+      li.querySelector(".merken").onclick = () => {
+        if (typeof startplaetze === "undefined") return;
+        const neu = { id: "sp" + Date.now().toString(36), name: x.name.slice(0, 30), hoehe: Math.round(x.hoehe), lat: x.lat, lon: x.lon };
+        startplaetze.push(neu);
+        if (speicherSchreiben(SP_KEY, startplaetze)) melden("„" + neu.name + "“ bei deinen Startplätzen gespeichert");
+        spZeigen(neu.id);
+        spFormular(neu);                             // gleich zum Pruefen/Korrigieren oeffnen
+        document.getElementById("spNeu").scrollIntoView({ behavior: "smooth", block: "center" });
+      };
+      ul.appendChild(li);
+    });
+    document.getElementById("pgeListeInfo").textContent = !pgeDaten.length ? "Noch nichts geladen."
+      : treffer.length > zeigen.length ? `${zeigen.length} von ${treffer.length} angezeigt – Suche eingrenzen.`
+      : `${treffer.length} Startplätze` + (pgeOrt ? ", nach Entfernung sortiert." : ".") + " ★ = gute Windrichtung.";
+  }
+
   function pgeInfo(text) {
     const el = document.getElementById("pgeInfo");
     if (!el) return;
@@ -257,7 +311,8 @@
     pgeInfo("Suche Standort …");
     navigator.geolocation.getCurrentPosition(async p => {
       pgeInfo("Lade Startplätze …");
-      try { const n = await rufen("spLaden", p.coords.latitude, p.coords.longitude, 150); melden(n + " Startplätze gespeichert"); pgeInfo(); }
+      try { const n = await rufen("spLaden", p.coords.latitude, p.coords.longitude, 150); melden(n + " Startplätze gespeichert"); pgeInfo();
+            if (!document.getElementById("pgeListeBox").hidden) pgeListe(); }
       catch (e) { pgeInfo(e.message); }
       b.disabled = false;
       if (typeof naechsterStartplatz === "function") naechsterStartplatz(true);

@@ -251,6 +251,7 @@ class MainActivity : Activity() {
         @JavascriptInterface fun spFragenSetzen(an: Boolean) = Startplaetze.fragenSetzen(an)
         @JavascriptInterface fun spAnzahl(): Int = Startplaetze.anzahl()
         @JavascriptInterface fun spStand(): Double = Startplaetze.stand().toDouble()
+        @JavascriptInterface fun spListe(lat: Double, lon: Double, max: Int): String = Startplaetze.listeJson(lat, lon, max)
         @JavascriptInterface fun spNaechster(lat: Double, lon: Double, maxM: Double): String = Startplaetze.naechsterJson(lat, lon, maxM)
         @JavascriptInterface fun spLaden(id: Int, lat: Double, lon: Double, km: Int) = runOnUiThread {
             Startplaetze.laden(lat, lon, km) { n, fehler -> fertig(id, n != null, n?.toString() ?: fehler) }

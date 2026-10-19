@@ -289,6 +289,23 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
         </div>
         <label>Startrichtung <span class="note">(antippen: 1× möglich, 2× gut, 3× aus)</span></label>
         <div class="richtreihe"><span id="spRoseForm"></span><div class="richtwahl" id="spRichtWahl" style="flex:1"></div></div>
+        <button type="button" id="kmStart">Richtung mit dem Handy messen</button>
+        <div id="kmBox" hidden style="display:grid;gap:8px;justify-items:center;padding:8px 0">
+          <svg id="kmRose" viewBox="-110 -110 220 220" width="220" height="220" role="img" aria-label="Kompass">
+            <circle r="104" fill="var(--chip)" stroke="var(--line)" stroke-width="2"/>
+            <g id="kmScheibe"></g>
+            <path d="M0 -108 L9 -88 L-9 -88 Z" fill="var(--accent)"/>
+            <circle r="44" fill="var(--surface)" stroke="var(--line)"/>
+            <text id="kmGrad" y="4" text-anchor="middle" font-family="var(--f-display)" font-weight="700" font-size="28" fill="var(--fg)">–</text>
+            <text id="kmSektor" y="26" text-anchor="middle" font-family="var(--f-display)" font-weight="700" font-size="18" fill="var(--accent)"></text>
+          </svg>
+          <div class="note" id="kmHinweis" style="text-align:center">Handy flach halten. Die Oberkante zeigt in die Startrichtung – also dorthin, wohin du beim Start läufst (gegen den Wind).</div>
+          <div class="knopfreihe" style="width:100%">
+            <button type="button" class="primary" id="kmGut">Als gute Richtung setzen</button>
+            <button type="button" id="kmMoeglich">Als möglich setzen</button>
+            <button type="button" id="kmFertig">Fertig</button>
+          </div>
+        </div>
         <label class="check"><input type="checkbox" id="spMitOrt"> Standort mitspeichern (für die GPS-Suche)</label>
         <div class="note" id="spOrtInfo">Kein Standort.</div>
         <div class="knopfreihe">
@@ -745,6 +762,66 @@ function windRose(t, gr) {
   return `<svg class="rose" viewBox="0 0 ${g} ${g}" width="${g}" height="${g}" role="img" aria-label="Startrichtung ${richtDeutsch(t) || "unbekannt"}">${w}<text x="${c}" y="${g * 0.3}" font-size="${g * 0.26}" text-anchor="middle" fill="var(--fg)" font-family="var(--f-display)" font-weight="700">N</text></svg>`;
 }
 let spRichtung = {};
+
+// ---- Kompass: Startrichtung mit dem Handy messen ----
+let kmUhr = null, kmGradJetzt = -1, kmGenau = 3, kmWeb = null;
+function kmScheibeBauen() {
+  let s = "";
+  for (let g = 0; g < 360; g += 15) {
+    const lang = g % 45 === 0, r1 = lang ? 82 : 92, a = g * Math.PI / 180;
+    s += `<line x1="${(Math.sin(a) * r1).toFixed(1)}" y1="${(-Math.cos(a) * r1).toFixed(1)}" x2="${(Math.sin(a) * 100).toFixed(1)}" y2="${(-Math.cos(a) * 100).toFixed(1)}" stroke="var(--muted)" stroke-width="${lang ? 2.5 : 1}"/>`;
+  }
+  RICHT.forEach((k, i) => {
+    const a = i * 45 * Math.PI / 180, r = 66;
+    const x = (Math.sin(a) * r).toFixed(1), y = (-Math.cos(a) * r).toFixed(1);
+    s += `<text class="kmBuchst" data-x="${x}" data-y="${y}" x="${x}" y="${(+y + 6).toFixed(1)}" text-anchor="middle" font-family="var(--f-display)" font-weight="700" font-size="${k.length > 1 ? 15 : 20}" fill="${k === "N" ? "var(--sinken)" : "var(--fg)"}">${RICHT_DE[k]}</text>`;
+  });
+  $("kmScheibe").innerHTML = s;
+}
+function kmZeigen(grad) {
+  kmGradJetzt = grad;
+  $("kmScheibe").setAttribute("transform", `rotate(${-grad})`);
+  document.querySelectorAll(".kmBuchst").forEach(t => t.setAttribute("transform", `rotate(${grad} ${t.dataset.x} ${t.dataset.y})`));   // Buchstaben bleiben aufrecht
+  const k = RICHT[Math.round(grad / 45) % 8];
+  $("kmGrad").textContent = Math.round(grad) + "°";
+  $("kmSektor").textContent = RICHT_DE[k];
+  $("kmHinweis").textContent = kmGenau < 2
+    ? "Kompass ungenau: Handy ein paar Mal in Form einer Acht schwenken."
+    : "Handy flach halten. Die Oberkante zeigt in die Startrichtung – also dorthin, wohin du beim Start läufst (gegen den Wind).";
+}
+async function kmStarten() {
+  kmScheibeBauen();
+  $("kmBox").hidden = false; $("kmStart").hidden = true;
+  const N = window.SweefNative;
+  if (N && N.kompassStart && N.kompassStart()) {
+    kmUhr = setInterval(() => { const t = N.kompass(); if (t) { const d = JSON.parse(t); kmGenau = d.genau; kmZeigen(d.grad); } }, 120);
+    return;
+  }
+  // ohne App: Kompass des Browsers (iPhone: einmal erlauben)
+  try { if (window.DeviceOrientationEvent && DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+  kmWeb = e => {
+    let g = null;
+    if (e.webkitCompassHeading != null) g = e.webkitCompassHeading;
+    else if (e.absolute && e.alpha != null) g = (360 - e.alpha) % 360;
+    if (g != null) kmZeigen(g);
+  };
+  window.addEventListener("deviceorientationabsolute", kmWeb);
+  window.addEventListener("deviceorientation", kmWeb);
+  setTimeout(() => { if (kmGradJetzt < 0) $("kmHinweis").textContent = "Dieses Handy liefert hier keinen Kompass – bitte die Richtung oben antippen."; }, 3000);
+}
+function kmStoppen() {
+  clearInterval(kmUhr); kmUhr = null;
+  try { if (window.SweefNative && SweefNative.kompassStop) SweefNative.kompassStop(); } catch (e) {}
+  if (kmWeb) { window.removeEventListener("deviceorientationabsolute", kmWeb); window.removeEventListener("deviceorientation", kmWeb); kmWeb = null; }
+  $("kmBox").hidden = true; $("kmStart").hidden = false; kmGradJetzt = -1;
+}
+function kmSetzen(stufe) {
+  if (kmGradJetzt < 0) { melden("Noch keine Kompass-Richtung"); return; }
+  const k = RICHT[Math.round(kmGradJetzt / 45) % 8];
+  spRichtung[k] = stufe;
+  spRichtFormZeigen();
+  melden(`${RICHT_DE[k]} (${Math.round(kmGradJetzt)}°) als ${stufe === 2 ? "gut" : "möglich"} gesetzt`);
+}
 function spRichtFormZeigen() {
   $("spRichtWahl").innerHTML = "";
   RICHT.forEach(k => {
@@ -812,7 +889,11 @@ function spFormular(p, ort) {
   $("spName").focus();
 }
 $("spNeuKnopf").onclick = () => spFormular(null);
-$("spAbbrechen").onclick = () => { $("spNeu").hidden = true; spBearbeiten = null; };
+$("kmStart").onclick = kmStarten;
+$("kmFertig").onclick = kmStoppen;
+$("kmGut").onclick = () => kmSetzen(2);
+$("kmMoeglich").onclick = () => kmSetzen(1);
+$("spAbbrechen").onclick = () => { kmStoppen(); $("spNeu").hidden = true; spBearbeiten = null; };
 $("spSpeichern").onclick = () => {
   const name = $("spName").value.trim().slice(0, 30);
   const hoehe = parseFloat(String($("spHoehe").value).replace(",", "."));
@@ -828,6 +909,7 @@ $("spSpeichern").onclick = () => {
     startplaetze.push(Object.assign({ id: spBearbeiten, name, hoehe, richtung }, ort));
   }
   if (speicherSchreiben(SP_KEY, startplaetze)) melden("Startplatz gespeichert");
+  kmStoppen();
   spZeigen(spBearbeiten);
   $("spNeu").hidden = true; spBearbeiten = null;
 };

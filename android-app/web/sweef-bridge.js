@@ -141,6 +141,7 @@
           einrichten().catch(() => {});
         }
       } else if (art === "vordergrund") {
+        if (typeof kmUhr !== "undefined" && kmUhr && N.kompassStart) N.kompassStart();   // Kompass weiterlaufen lassen
         if (Date.now() - letztePruefung > 10 * 60 * 1000) versionenPruefen();
       } else if (art === "appupdate") {
         const t = document.getElementById("hinweisText");

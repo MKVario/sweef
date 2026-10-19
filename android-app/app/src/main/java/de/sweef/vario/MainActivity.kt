@@ -101,6 +101,12 @@ class MainActivity : Activity() {
         zurJs("_ereignis", JSONObject.quote("vordergrund"), "{}")
     }
 
+    override fun onPause() {
+        super.onPause()
+        Kompass.stoppen()                 // Sensor nicht im Hintergrund laufen lassen
+        zurJs("_ereignis", JSONObject.quote("pause"), "{}")
+    }
+
     override fun onDestroy() {
         VarioBle.ereignis = null
         web.destroy()
@@ -243,6 +249,11 @@ class MainActivity : Activity() {
 
         /** GPS-Punkte eines Zeitraums: "zeit_ms,lat,lon,hoehe;..." */
         @JavascriptInterface fun spur(von: Double, bis: Double): String = GpsSpur.abschnitt(von.toLong(), bis.toLong())
+
+        // ---- Kompass (Startrichtung messen) ----
+        @JavascriptInterface fun kompassStart(): Boolean = Kompass.starten(this@MainActivity)
+        @JavascriptInterface fun kompassStop() = Kompass.stoppen()
+        @JavascriptInterface fun kompass(): String = Kompass.stand()
 
         // ---- Startplaetze ----
         @JavascriptInterface fun eigeneStartplaetze(json: String) = Startplaetze.eigeneSetzen(json)

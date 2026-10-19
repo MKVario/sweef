@@ -61,6 +61,7 @@ class VarioService : Service() {
             val alt = (SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000_000.0
             if (alt <= 3 && (!l.hasAccuracy() || l.accuracy < 50)) {
                 if (VarioBle.bereit) VarioOrt.fix(l.latitude, l.longitude, l.accuracy, System.currentTimeMillis())
+                Startplaetze.pruefen(l.latitude, l.longitude, if (l.hasAccuracy()) l.accuracy else 99f)
             }
             if (alt <= 3 && (!l.hasAccuracy() || l.accuracy < 50))
                 GpsSpur.punkt(l.time, l.latitude, l.longitude, if (l.hasAltitude()) l.altitude else -9999.0)
@@ -80,6 +81,7 @@ class VarioService : Service() {
         super.onCreate()
         VarioBle.init(this)
         GpsSpur.init(this)
+        Startplaetze.init(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(KANAL, "Verbindung zum Vario", NotificationManager.IMPORTANCE_LOW)

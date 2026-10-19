@@ -711,6 +711,7 @@ function entfernungKm(a, b) {                       // Haversine
 
 function spZeigen(waehlen) {
   startplaetze.sort((a, b) => a.name.localeCompare(b.name, "de"));
+  try { if (window.SweefNative && SweefNative.eigeneStartplaetze) SweefNative.eigeneStartplaetze(JSON.stringify(startplaetze)); } catch (e) {}
   const sel = $("spWahl"), alt = waehlen || sel.value;
   sel.innerHTML = startplaetze.length
     ? startplaetze.map(p => `<option value="${p.id}">${esc(p.name)} · ${Math.round(p.hoehe)} m</option>`).join("")
@@ -802,6 +803,16 @@ async function naechsterStartplatz(still) {
   let best = null, bestKm = Infinity;
   mitOrt.forEach(p => { const km = entfernungKm(ort, p); if (km < bestKm) { bestKm = km; best = p; } });
   $("spGpsInfo").textContent = "";
+  if ((!best || bestKm > 2) && window.SweefNative && SweefNative.spNaechster) {    // Liste aus dem Internet
+    try {
+      const t = SweefNative.spNaechster(ort.lat, ort.lon, 2000);
+      if (t) {
+        const x = JSON.parse(t);
+        best = { id: x.id, name: x.name, hoehe: Math.round(x.hoehe), lat: x.lat, lon: x.lon, extern: true, richtungen: x.richtungen };
+        bestKm = x.m / 1000;
+      }
+    } catch (e) {}
+  }
   if (best && bestKm <= 2) {
     naheSp = { p: best, km: bestKm };
     $("spWahl").value = best.id;
@@ -840,12 +851,21 @@ function vorschlagZeigen(neuGesucht) {
          <span>Du bist am Startplatz ${esc(p.name)} (${Math.round(p.hoehe)} m) – die Höhe über Meer im Display stimmt so nicht.</span>`
       : `<span>Nächster Startplatz</span><b>${esc(p.name)} · ${Math.round(p.hoehe)} m über Meer</b>`) +
     `<span class="note">${kmText(km)} entfernt${km <= 0.5 ? " – du bist am Startplatz" : ""}</span>
+     ${p.extern ? `<span class="note">aus ParaglidingEarth${p.richtungen ? " · Wind: " + esc(p.richtungen.replace(/\+/g, " (gut)")) : ""} – wird beim Übernehmen bei deinen Startplätzen gespeichert</span>` : ""}
      <div class="knopfreihe"><button class="primary" id="spVorschlagOk">${esc(p.name)} übernehmen</button></div>`;
   if (neuGesucht || falsch) box.hidden = false;
-  $("spVorschlagOk").onclick = () => { $("spWahl").value = p.id; spUebernehmen(); };
+  $("spVorschlagOk").onclick = () => {
+    if (p.extern) {                                    // fremden Startplatz uebernehmen = bei mir speichern
+      const neu = { id: "sp" + Date.now().toString(36), name: p.name.slice(0, 30), hoehe: p.hoehe, lat: p.lat, lon: p.lon };
+      startplaetze.push(neu); speicherSchreiben(SP_KEY, startplaetze); spZeigen(neu.id);
+      naheSp = { p: neu, km: naheSp.km };
+    }
+    $("spWahl").value = naheSp.p.id; spUebernehmen();
+  };
 }
 function gpsAutomatisch() {                         // nur wenn Standort schon erlaubt ist
-  if (!navigator.permissions || !startplaetze.some(p => p.lat != null)) return;
+  const liste = window.SweefNative && SweefNative.spAnzahl && SweefNative.spAnzahl() > 0;
+  if (!navigator.permissions || (!startplaetze.some(p => p.lat != null) && !liste)) return;
   navigator.permissions.query({ name: "geolocation" }).then(r => { if (r.state === "granted") naechsterStartplatz(true); }).catch(() => {});
 }
 $("spOrt").onclick = () => naechsterStartplatz(false);
@@ -949,6 +969,7 @@ $("pinEingabe").addEventListener("keydown", e => { if (e.key === "Enter") $("pin
 
 async function entsperren() {
   entsperrt = true;
+  try { if (window.SweefNative && SweefNative.varioFrei) SweefNative.varioFrei(true); } catch (e) {}
   $("pinBox").hidden = true;
   $("pinEingabe").value = "";
   document.body.classList.remove("getrennt");
@@ -972,6 +993,11 @@ function antwortVerarbeiten(t) {
   if (t[0] === "P") {
     melden(t[1] === "1" ? "PIN gespeichert" : t[1] === "0" ? "PIN ausgeschaltet" : "PIN ungültig");
     if (t[1] === "0") schluesselVergessen();
+    return true;
+  }
+  if (t[0] === "S") {                                   // Startplatz-Frage am Vario
+    if (t[1] === "1") melden("Startplatz-Höhe übernommen, Höhe genullt");
+    else if (t[1] === "0") melden("Startplatz am Vario abgelehnt");
     return true;
   }
   return t[0] === "N" || t[0] === "G";
@@ -1561,6 +1587,7 @@ async function einrichten() {
 
 function getrennt() {
   befehlKanal = null; einstKanal = null; entsperrt = false;
+  try { if (window.SweefNative && SweefNative.varioFrei) SweefNative.varioFrei(false); } catch (e) {}
   varioNN = null; vorschlagZeigen(false);
   verbZeigen(false);
   document.body.classList.add("getrennt");

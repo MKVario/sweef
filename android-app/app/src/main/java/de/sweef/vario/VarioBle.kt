@@ -36,6 +36,9 @@ object VarioBle {
     private const val TAG = "SweefBle"
     val DIENST: UUID = UUID.fromString("7e5e0001-b5a3-f393-e0a9-e50e24dcca9e")
     val BEFEHL: UUID = UUID.fromString("7e5e0003-b5a3-f393-e0a9-e50e24dcca9e")
+    val LIVE: UUID = UUID.fromString("7e5e0004-b5a3-f393-e0a9-e50e24dcca9e")
+    /** zaehlt jede neue Verbindung (fuer "an diesem Startplatz schon gefragt") */
+    @Volatile var verbindungNr = 0; private set
     private val CCCD: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
     /** Meldungen an die Oberflaeche ("verbunden", "getrennt", "notify", ...) */
@@ -214,6 +217,7 @@ object VarioBle {
                 }
                 handler.removeCallbacks(verbindenZeitlimit)
                 dienst = d; bereit = true; verbindet = false
+                verbindungNr++
                 ctx.getSharedPreferences("sweef", Context.MODE_PRIVATE).edit().putString("letztes_vario", adresse).apply()
                 val w = wartende.toList(); wartende.clear()
                 w.forEach { it(true, null) }
@@ -252,6 +256,7 @@ object VarioBle {
     }
 
     private fun meldung(uuid: UUID, v: ByteArray) {
+        if (uuid == LIVE) try { Startplaetze.live(String(v, Charsets.UTF_8)) } catch (_: Exception) {}
         handler.post {
             ereignis?.invoke("notify", JSONObject()
                 .put("u", uuid.toString())
@@ -356,6 +361,15 @@ object VarioBle {
     // ------------------------------------------------------------------
     // GPS-Tempo ans Vario (vom Hintergrund-Dienst jede Sekunde)
     // ------------------------------------------------------------------
+    /** kurzer Befehl ans Vario (ohne Rueckmeldung an die Seite) */
+    fun befehlSenden(text: String) {
+        handler.post {
+            if (!bereit) return@post
+            schlange.addLast(Op(0, BEFEHL, text.toByteArray(Charsets.UTF_8), true) { _, _, _ -> })
+            naechste()
+        }
+    }
+
     fun tempoSenden(kmh: Float) {
         handler.post {
             if (!bereit || schlange.size > 3) return@post

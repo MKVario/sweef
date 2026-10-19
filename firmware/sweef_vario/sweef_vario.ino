@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.22"
+#define FW_VERSION "2.10.23"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -159,6 +159,12 @@ int   lautStufe  = LAUT_START;   // 0 = stumm
 float nullDruck  = 0;
 
 void meldung(const char* z1, const char* z2, const char* z3 = "", const char* z4 = "");
+// Startplatz-Frage vom Handy: "Startplatz? Name, Hoehe  T1 = Ja, T2 = Nein"
+char frageName[28] = "";
+int frageHoehe = 0;
+unsigned long frageBis = 0;
+bool frageAktiv() { return frageBis && (long)(millis() - frageBis) < 0; }
+void frageBox();
 
 bool taste1() { return digitalRead(PIN_TASTE1) == LOW; }
 bool taste2() { return digitalRead(PIN_TASTE2) == LOW; }
@@ -1363,6 +1369,7 @@ void bildZeichnen() {
   if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox("Akku", warnText);
   else warnBis = 0;
   if (suchenLaeuft() && (millis() / 300) % 2) hinweisBox("Hier!", "Taste=aus");
+  if (frageAktiv()) frageBox();
 }
 
 // Schwarze Schrift in weissem Kasten mitten im Bild
@@ -1799,6 +1806,7 @@ void bildZeichnen() {
   if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox("Akku", warnText);
   else warnBis = 0;
   if (suchenLaeuft() && (millis() / 300) % 2) hinweisBox("Hier!", "Taste = aus");
+  if (frageAktiv()) frageBox();
 }
 
 // Schwarze Schrift in weissem Kasten mitten im Bild
@@ -1981,6 +1989,29 @@ void selbsttest() {
 }
 
 #endif  // DISPLAY_KLEIN
+
+// Startplatz-Frage ueber der normalen Anzeige (passt auf beide Displays)
+void frageBox() {
+  char name[28], hoehe[16];
+  strncpy(name, frageName, sizeof(name) - 1); name[sizeof(name) - 1] = 0;
+  anzeige.setFont(u8g2_font_6x10_tf);
+  while (strlen(name) > 3 && anzeige.getUTF8Width(name) > BR - 4) name[strlen(name) - 1] = 0;   // kuerzen
+  snprintf(hoehe, sizeof(hoehe), "%d m", frageHoehe);
+  anzeige.setDrawColor(1);
+  anzeige.drawBox(0, 30, BR, 64);
+  anzeige.setDrawColor(0);
+  const char* titel = BR >= 100 ? "Startplatz?" : "Startpl.?";
+  anzeige.drawUTF8(textMitte(titel), 42, titel);
+  anzeige.drawUTF8(textMitte(name), 55, name);
+  anzeige.drawUTF8(textMitte(hoehe), 68, hoehe);
+  if (BR >= 100) {
+    anzeige.drawUTF8(textMitte("T1 = Ja  T2 = Nein"), 86, "T1 = Ja  T2 = Nein");
+  } else {
+    anzeige.drawUTF8(textMitte("T1 = Ja"), 81, "T1 = Ja");
+    anzeige.drawUTF8(textMitte("T2 = Nein"), 92, "T2 = Nein");
+  }
+  anzeige.setDrawColor(1);
+}
 
 // =================================================================
 // Ein / Aus
@@ -2546,6 +2577,17 @@ void befehlVomHandy(char* text) {
   if (strncmp(text, "pin_neu=", 8) == 0) { pinSetzen(text + 8); return; }
   if (strncmp(text, "nm=", 3) == 0)      { nameSetzen(text + 3); return; }
   if (strncmp(text, "gt=", 3) == 0)      { grussSetzen(text + 3); return; }
+  if (strncmp(text, "spfrage=", 8) == 0) {             // Startplatz-Frage (nur am Boden)
+    if (imFlug) { antwort("S,9"); return; }
+    char* trenn = strchr(text + 8, '|');
+    frageHoehe = atoi(text + 8);
+    strncpy(frageName, trenn ? trenn + 1 : "", sizeof(frageName) - 1);
+    frageName[sizeof(frageName) - 1] = 0;
+    frageBis = millis() + 30000;
+    aktivJetzt();
+    kurzerPiep(1200, 70); delay(50); kurzerPiep(1600, 90);
+    return;
+  }
   befehlAusfuehren(text, true);
 }
 
@@ -2815,6 +2857,24 @@ void tasterAbfragen() {
     t1Start = t2Start = beideStart = 0;
     return;
   }
+  if (frageAktiv() && (t1 || t2)) {            // Antwort auf die Startplatz-Frage
+    while (taste1() || taste2()) messen();
+    delay(30);
+    frageBis = 0;
+    if (t1 && !t2) {
+      char b[32];
+      snprintf(b, sizeof(b), "nn=%d;null", frageHoehe);
+      befehlAusfuehren(b, true);
+      antwort("S,1");
+      kurzerPiep(1500, 80); delay(60); kurzerPiep(2000, 120);
+    } else {
+      antwort("S,0");
+      kurzerPiep(700, 120);
+    }
+    t1Start = t2Start = beideStart = 0;
+    aktivJetzt();
+    return;
+  }
   unsigned long jetzt = millis();
   if (t1 || t2) aktivJetzt();
 
@@ -2968,6 +3028,7 @@ void loop() {
   akkuWarnen();
   if (speichernUm && (long)(millis() - speichernUm) >= 0) lautSpeichern();
   if (updateModusAb && (long)(millis() - updateModusAb) >= 0) updateModusStarten();
+  if (frageBis && (!frageAktiv() || imFlug)) { frageBis = 0; antwort("S,2"); }   // keine Antwort / gestartet
 }
 
 // Firmware-Update per Bluetooth: Einstellungen sichern, dann in den Bootloader.

@@ -204,6 +204,7 @@
       const z = zuletzt();
       if (z) location.href = "https://www.google.com/maps/dir/?api=1&travelmode=walking&destination=" + z.lat + "," + z.lon;
     };
+    spBereichBauen();
     setInterval(woZeigen, 5000);
     document.getElementById("tab_geraet").addEventListener("click", () => setTimeout(woZeigen, 50));
     woZeigen();
@@ -221,6 +222,47 @@
     setTimeout(versionenPruefen, 3000);               // kurz nach dem Start
     setInterval(versionenPruefen, 6 * 3600 * 1000);    // und alle 6 Stunden
     statusZeigen();
+  }
+
+  // ---------------- Startplaetze aus ParaglidingEarth ----------------
+  function spBereichBauen() {
+    const sp = document.getElementById("startplatz");
+    if (!sp || document.getElementById("pgeBox")) return;
+    const d = document.createElement("details");
+    d.id = "pgeBox";
+    d.innerHTML = `
+      <summary>Startplätze aus dem Internet</summary>
+      <label class="schalter"><span><b>Vario fragt am Startplatz</b><small>Steht das Vario am Boden in der Nähe eines Startplatzes, fragt es, ob dessen Höhe übernommen werden soll (T1 = Ja, T2 = Nein).</small></span><input type="checkbox" class="switch" id="spFragen"></label>
+      <p class="note" id="pgeInfo" style="margin:6px 0"></p>
+      <div class="knopfreihe"><button id="pgeLaden">Startplätze im Umkreis von 150 km laden</button></div>
+      <p class="note" style="margin:0 0 8px">Vorher laden, solange du Internet hast – danach geht es auch ohne. Daten: ParaglidingEarth (CC BY-SA). Höhen können ungenau sein: bitte beim ersten Mal prüfen.</p>`;
+    const vor = document.getElementById("spVerwalten");
+    sp.insertBefore(d, vor);
+    const sw = document.getElementById("spFragen");
+    sw.checked = N.spFragenAn();
+    sw.onchange = () => N.spFragenSetzen(sw.checked);
+    document.getElementById("pgeLaden").onclick = pgeLaden;
+    pgeInfo();
+  }
+  function pgeInfo(text) {
+    const el = document.getElementById("pgeInfo");
+    if (!el) return;
+    if (text) { el.textContent = text; return; }
+    const n = N.spAnzahl(), t = N.spStand();
+    el.textContent = n ? n + " Startplätze gespeichert (Stand " + new Date(t).toLocaleDateString("de-DE") + ")." : "Noch keine Startplätze aus dem Internet geladen.";
+  }
+  function pgeLaden() {
+    const b = document.getElementById("pgeLaden");
+    b.disabled = true;
+    pgeInfo("Suche Standort …");
+    navigator.geolocation.getCurrentPosition(async p => {
+      pgeInfo("Lade Startplätze …");
+      try { const n = await rufen("spLaden", p.coords.latitude, p.coords.longitude, 150); melden(n + " Startplätze gespeichert"); pgeInfo(); }
+      catch (e) { pgeInfo(e.message); }
+      b.disabled = false;
+      if (typeof naechsterStartplatz === "function") naechsterStartplatz(true);
+    }, () => { pgeInfo("Kein Standort – GPS einschalten und nochmal versuchen."); b.disabled = false; },
+    { enableHighAccuracy: false, timeout: 20000, maximumAge: 600000 });
   }
 
   // ---------------- Wo ist mein Vario? ----------------

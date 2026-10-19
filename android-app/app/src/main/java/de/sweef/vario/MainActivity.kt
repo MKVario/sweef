@@ -44,6 +44,7 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         VarioBle.init(this)
         GpsSpur.init(this)
+        Startplaetze.init(this)
 
         val lader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -242,6 +243,18 @@ class MainActivity : Activity() {
 
         /** GPS-Punkte eines Zeitraums: "zeit_ms,lat,lon,hoehe;..." */
         @JavascriptInterface fun spur(von: Double, bis: Double): String = GpsSpur.abschnitt(von.toLong(), bis.toLong())
+
+        // ---- Startplaetze ----
+        @JavascriptInterface fun eigeneStartplaetze(json: String) = Startplaetze.eigeneSetzen(json)
+        @JavascriptInterface fun varioFrei(an: Boolean) { Startplaetze.frei = an }
+        @JavascriptInterface fun spFragenAn(): Boolean = Startplaetze.fragenAn()
+        @JavascriptInterface fun spFragenSetzen(an: Boolean) = Startplaetze.fragenSetzen(an)
+        @JavascriptInterface fun spAnzahl(): Int = Startplaetze.anzahl()
+        @JavascriptInterface fun spStand(): Double = Startplaetze.stand().toDouble()
+        @JavascriptInterface fun spNaechster(lat: Double, lon: Double, maxM: Double): String = Startplaetze.naechsterJson(lat, lon, maxM)
+        @JavascriptInterface fun spLaden(id: Int, lat: Double, lon: Double, km: Int) = runOnUiThread {
+            Startplaetze.laden(lat, lon, km) { n, fehler -> fertig(id, n != null, n?.toString() ?: fehler) }
+        }
 
         /** "Wo ist mein Vario?": {"lat","lon","genau","zeit","name"} oder "" */
         @JavascriptInterface fun zuletztGesehen(): String = VarioOrt.lesen(this@MainActivity)

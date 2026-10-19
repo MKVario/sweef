@@ -73,7 +73,7 @@ object Startplaetze {
             eigene = (0 until a.length()).mapNotNull { i ->
                 val o = a.getJSONObject(i)
                 if (o.isNull("lat") || o.isNull("lon")) null
-                else Platz("e:" + o.optString("id"), o.optString("name"), o.getDouble("lat"), o.getDouble("lon"), o.getDouble("hoehe"), true)
+                else Platz("e:" + o.optString("id"), o.optString("name"), o.getDouble("lat"), o.getDouble("lon"), o.getDouble("hoehe"), true, o.optString("richtung"))
             }
         } catch (_: Exception) {}
     }
@@ -126,7 +126,15 @@ object Startplaetze {
         gefragt += p.id
         if (!nnJetzt.isNaN() && kotlin.math.abs(nnJetzt - p.hoehe) <= 5) return    // passt schon
         val name = p.name.replace(Regex("[|;=\\n\\r]"), " ").trim().take(24)
-        VarioBle.befehlSenden(String.format(Locale.US, "spfrage=%d|%s", Math.round(p.hoehe).toInt(), name))
+        VarioBle.befehlSenden(String.format(Locale.US, "spfrage=%d|%s|%s", Math.round(p.hoehe).toInt(), name, richtungKurz(p.richtungen)))
+    }
+
+    /** "S+ SW W+" -> "S/W" (gute Richtungen, deutsch); ohne gute die moeglichen */
+    private val DE = mapOf("N" to "N", "NE" to "NO", "E" to "O", "SE" to "SO", "S" to "S", "SW" to "SW", "W" to "W", "NW" to "NW")
+    fun richtungKurz(t: String): String {
+        val teile = t.split(' ').filter { it.isNotBlank() }
+        val gut = teile.filter { it.endsWith("+") }.map { it.trimEnd('+') }
+        return (gut.ifEmpty { teile.map { it.trimEnd('+') } }).mapNotNull { DE[it] }.joinToString("/").take(9)
     }
 
     // ---------------- ParaglidingEarth laden ----------------

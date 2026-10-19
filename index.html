@@ -203,6 +203,12 @@ select {
 .spreihe select, .spreihe input:not([type=checkbox]) { flex: 1 1 160px; }
 .check { display: flex; gap: 10px; align-items: center; font-weight: 400; font-size: .95rem; }
 .check input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+.rose { flex: none; vertical-align: middle; }
+.richtreihe { display: flex; align-items: center; gap: 10px; }
+.richtwahl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.richtwahl button { min-height: 40px; padding: 4px; font: 600 .95rem var(--f-display); color: var(--muted); }
+.richtwahl button[data-w="1"] { background: color-mix(in srgb, var(--accent) 35%, var(--chip)); color: var(--fg); }
+.richtwahl button[data-w="2"] { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .vorschlag { border: 1px solid var(--accent); border-radius: 14px; padding: 10px 12px; display: grid; gap: 8px; background: var(--chip); }
 .vorschlag b { font: 600 1.15rem var(--f-display); }
 .splist { list-style: none; margin: 0; padding: 0; }
@@ -265,6 +271,7 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
           <select id="spWahl" aria-label="Gespeicherter Startplatz"></select>
           <button class="primary" id="spUebernehmen">Übernehmen</button>
         </div>
+        <div class="richtreihe" id="spRichtAnz" hidden></div>
         <div class="note" id="spAktuell"></div>
         <label class="check"><input type="checkbox" id="spNullen"> Höhe am Vario jetzt auf 0 setzen (ich stehe am Startplatz)</label>
         <div class="knopfreihe">
@@ -280,6 +287,8 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
           <input type="number" id="spHoehe" inputmode="decimal" step="1" min="-100" max="5000" placeholder="Höhe über Meer" aria-label="Höhe über Meer in Metern">
           <span>m über Meer</span>
         </div>
+        <label>Startrichtung <span class="note">(antippen: 1× möglich, 2× gut, 3× aus)</span></label>
+        <div class="richtreihe"><span id="spRoseForm"></span><div class="richtwahl" id="spRichtWahl" style="flex:1"></div></div>
         <label class="check"><input type="checkbox" id="spMitOrt"> Standort mitspeichern (für die GPS-Suche)</label>
         <div class="note" id="spOrtInfo">Kein Standort.</div>
         <div class="knopfreihe">
@@ -709,6 +718,51 @@ function entfernungKm(a, b) {                       // Haversine
   return 12742 * Math.asin(Math.sqrt(h));
 }
 
+// ---- Startrichtung: "S+ SW" = Sued gut, Suedwest moeglich ----
+const RICHT = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const RICHT_DE = { N: "N", NE: "NO", E: "O", SE: "SO", S: "S", SW: "SW", W: "W", NW: "NW" };
+function richtLesen(t) {
+  const m = {};
+  String(t || "").split(/\s+/).forEach(x => { const k = x.replace("+", ""); if (RICHT.includes(k)) m[k] = x.endsWith("+") ? 2 : 1; });
+  return m;
+}
+function richtText(m) { return RICHT.filter(k => m[k]).map(k => k + (m[k] === 2 ? "+" : "")).join(" "); }
+function richtDeutsch(t) {
+  const m = richtLesen(t);
+  const gut = RICHT.filter(k => m[k] === 2).map(k => RICHT_DE[k]), mog = RICHT.filter(k => m[k] === 1).map(k => RICHT_DE[k]);
+  if (!gut.length && !mog.length) return "";
+  return (gut.length ? gut.join(", ") + (mog.length ? " · möglich " + mog.join(", ") : "") : "möglich " + mog.join(", "));
+}
+// kleine Windrose: gute Richtungen voll, moegliche halb
+function windRose(t, gr) {
+  const m = richtLesen(t), g = gr || 34, r = g / 2 - 1, c = g / 2;
+  let w = "";
+  RICHT.forEach((k, i) => {
+    const a1 = (i * 45 - 22.5 - 90) * Math.PI / 180, a2 = (i * 45 + 22.5 - 90) * Math.PI / 180;
+    const f = m[k] === 2 ? "var(--accent)" : m[k] === 1 ? "color-mix(in srgb, var(--accent) 40%, var(--chip))" : "var(--chip)";
+    w += `<path d="M${c} ${c}L${(c + r * Math.cos(a1)).toFixed(1)} ${(c + r * Math.sin(a1)).toFixed(1)}A${r} ${r} 0 0 1 ${(c + r * Math.cos(a2)).toFixed(1)} ${(c + r * Math.sin(a2)).toFixed(1)}Z" fill="${f}" stroke="var(--surface)" stroke-width="1"/>`;
+  });
+  return `<svg class="rose" viewBox="0 0 ${g} ${g}" width="${g}" height="${g}" role="img" aria-label="Startrichtung ${richtDeutsch(t) || "unbekannt"}">${w}<text x="${c}" y="${g * 0.3}" font-size="${g * 0.26}" text-anchor="middle" fill="var(--fg)" font-family="var(--f-display)" font-weight="700">N</text></svg>`;
+}
+let spRichtung = {};
+function spRichtFormZeigen() {
+  $("spRichtWahl").innerHTML = "";
+  RICHT.forEach(k => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = RICHT_DE[k]; b.dataset.w = spRichtung[k] || 0;
+    b.setAttribute("aria-label", "Startrichtung " + RICHT_DE[k]);
+    b.onclick = () => { spRichtung[k] = ((spRichtung[k] || 0) + 1) % 3; if (!spRichtung[k]) delete spRichtung[k]; spRichtFormZeigen(); };
+    $("spRichtWahl").appendChild(b);
+  });
+  $("spRoseForm").innerHTML = windRose(richtText(spRichtung), 60);
+}
+function spRichtAnzeigen() {
+  const p = startplaetze.find(x => x.id === $("spWahl").value);
+  const t = p && p.richtung;
+  $("spRichtAnz").hidden = !t;
+  if (t) $("spRichtAnz").innerHTML = windRose(t) + `<span>Startrichtung ${esc(richtDeutsch(t))}</span>`;
+}
+
 function spZeigen(waehlen) {
   startplaetze.sort((a, b) => a.name.localeCompare(b.name, "de"));
   try { if (window.SweefNative && SweefNative.eigeneStartplaetze) SweefNative.eigeneStartplaetze(JSON.stringify(startplaetze)); } catch (e) {}
@@ -722,7 +776,7 @@ function spZeigen(waehlen) {
   if (!startplaetze.length) ul.innerHTML = `<li><span class="klein">Noch keine Startplätze gespeichert.</span></li>`;
   startplaetze.forEach(p => {
     const li = document.createElement("li");
-    li.innerHTML = `<span>${esc(p.name)} · ${Math.round(p.hoehe)} m<br><span class="klein">${p.lat != null ? "mit Standort" : "ohne Standort"}</span></span>
+    li.innerHTML = `<span class="richtreihe">${p.richtung ? windRose(p.richtung, 42) : ""}<span>${esc(p.name)} · ${Math.round(p.hoehe)} m<br><span class="klein">${[p.richtung ? "Start " + esc(richtDeutsch(p.richtung)) : "", p.lat != null ? "mit Standort" : "ohne Standort"].filter(Boolean).join(" · ")}</span></span></span>
       <button class="aendern">Ändern</button><button class="danger loeschen">Löschen</button>`;
     li.querySelector(".aendern").onclick = () => spFormular(p);
     li.querySelector(".loeschen").onclick = e => {
@@ -734,6 +788,7 @@ function spZeigen(waehlen) {
     };
     ul.appendChild(li);
   });
+  spRichtAnzeigen();
 }
 
 function spOrtText() {
@@ -750,6 +805,8 @@ function spFormular(p, ort) {
   $("spHoehe").value = p ? Math.round(p.hoehe) : (ort && ort.hoehe != null ? Math.round(ort.hoehe) : "");
   spOrtNeu = ort ? ort : (p && p.lat != null ? { lat: p.lat, lon: p.lon } : null);
   spOrtText();
+  spRichtung = richtLesen(p && p.richtung);
+  spRichtFormZeigen();
   $("spNeu").hidden = false;
   if (ort && ort.hoehe != null) $("spGpsInfo").textContent = "Die Höhe kommt vom GPS und ist oft 10–30 m ungenau – bitte prüfen (z. B. Karte oder Startplatz-Schild).";
   $("spName").focus();
@@ -762,12 +819,13 @@ $("spSpeichern").onclick = () => {
   if (!name) { melden("Bitte einen Namen eingeben"); return; }
   if (!isFinite(hoehe) || hoehe < -100 || hoehe > 5000) { melden("Höhe zwischen -100 und 5000 m eingeben"); return; }
   const ort = $("spMitOrt").checked && spOrtNeu ? { lat: spOrtNeu.lat, lon: spOrtNeu.lon } : { lat: null, lon: null };
+  const richtung = richtText(spRichtung);
   if (spBearbeiten) {
     const p = startplaetze.find(x => x.id === spBearbeiten);
-    Object.assign(p, { name, hoehe }, ort);
+    Object.assign(p, { name, hoehe, richtung }, ort);
   } else {
     spBearbeiten = "sp" + Date.now().toString(36);
-    startplaetze.push(Object.assign({ id: spBearbeiten, name, hoehe }, ort));
+    startplaetze.push(Object.assign({ id: spBearbeiten, name, hoehe, richtung }, ort));
   }
   if (speicherSchreiben(SP_KEY, startplaetze)) melden("Startplatz gespeichert");
   spZeigen(spBearbeiten);
@@ -851,12 +909,13 @@ function vorschlagZeigen(neuGesucht) {
          <span>Du bist am Startplatz ${esc(p.name)} (${Math.round(p.hoehe)} m) – die Höhe über Meer im Display stimmt so nicht.</span>`
       : `<span>Nächster Startplatz</span><b>${esc(p.name)} · ${Math.round(p.hoehe)} m über Meer</b>`) +
     `<span class="note">${kmText(km)} entfernt${km <= 0.5 ? " – du bist am Startplatz" : ""}</span>
-     ${p.extern ? `<span class="note">aus ParaglidingEarth${p.richtungen ? " · Wind: " + esc(p.richtungen.replace(/\+/g, " (gut)")) : ""} – wird beim Übernehmen bei deinen Startplätzen gespeichert</span>` : ""}
+     ${(p.richtungen || p.richtung) ? `<span class="richtreihe">${windRose(p.richtungen || p.richtung)}<span>Startrichtung ${esc(richtDeutsch(p.richtungen || p.richtung))}</span></span>` : ""}
+     ${p.extern ? `<span class="note">aus ParaglidingEarth – wird beim Übernehmen bei deinen Startplätzen gespeichert</span>` : ""}
      <div class="knopfreihe"><button class="primary" id="spVorschlagOk">${esc(p.name)} übernehmen</button></div>`;
   if (neuGesucht || falsch) box.hidden = false;
   $("spVorschlagOk").onclick = () => {
     if (p.extern) {                                    // fremden Startplatz uebernehmen = bei mir speichern
-      const neu = { id: "sp" + Date.now().toString(36), name: p.name.slice(0, 30), hoehe: p.hoehe, lat: p.lat, lon: p.lon };
+      const neu = { id: "sp" + Date.now().toString(36), name: p.name.slice(0, 30), hoehe: p.hoehe, lat: p.lat, lon: p.lon, richtung: p.richtungen || "" };
       startplaetze.push(neu); speicherSchreiben(SP_KEY, startplaetze); spZeigen(neu.id);
       naheSp = { p: neu, km: naheSp.km };
     }
@@ -879,7 +938,7 @@ async function spUebernehmen() {
   if (naheSp && naheSp.p.id === p.id) $("spVorschlag").hidden = true;
 }
 $("spUebernehmen").onclick = spUebernehmen;
-$("spWahl").onchange = () => { $("spNullen").checked = false; };
+$("spWahl").onchange = () => { $("spNullen").checked = false; spRichtAnzeigen(); };
 spZeigen();
 
 // ================================================================

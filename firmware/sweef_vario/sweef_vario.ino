@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.23"
+#define FW_VERSION "2.10.24"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -161,6 +161,7 @@ float nullDruck  = 0;
 void meldung(const char* z1, const char* z2, const char* z3 = "", const char* z4 = "");
 // Startplatz-Frage vom Handy: "Startplatz? Name, Hoehe  T1 = Ja, T2 = Nein"
 char frageName[28] = "";
+char frageRichtung[12] = "";    // gute Startrichtungen, z. B. "S/SW"
 int frageHoehe = 0;
 unsigned long frageBis = 0;
 bool frageAktiv() { return frageBis && (long)(millis() - frageBis) < 0; }
@@ -1992,11 +1993,17 @@ void selbsttest() {
 
 // Startplatz-Frage ueber der normalen Anzeige (passt auf beide Displays)
 void frageBox() {
-  char name[28], hoehe[16];
+  char name[28], hoehe[28];
   strncpy(name, frageName, sizeof(name) - 1); name[sizeof(name) - 1] = 0;
   anzeige.setFont(u8g2_font_6x10_tf);
   while (strlen(name) > 3 && anzeige.getUTF8Width(name) > BR - 4) name[strlen(name) - 1] = 0;   // kuerzen
   snprintf(hoehe, sizeof(hoehe), "%d m", frageHoehe);
+  if (frageRichtung[0]) {                      // Hoehe und Startrichtung in einer Zeile, wenn es passt
+    char mit[28];
+    snprintf(mit, sizeof(mit), "%d m %s", frageHoehe, frageRichtung);
+    anzeige.setFont(u8g2_font_6x10_tf);
+    if (anzeige.getUTF8Width(mit) <= BR - 4) strncpy(hoehe, mit, sizeof(hoehe) - 1), hoehe[sizeof(hoehe) - 1] = 0;
+  }
   anzeige.setDrawColor(1);
   anzeige.drawBox(0, 30, BR, 64);
   anzeige.setDrawColor(0);
@@ -2579,10 +2586,14 @@ void befehlVomHandy(char* text) {
   if (strncmp(text, "gt=", 3) == 0)      { grussSetzen(text + 3); return; }
   if (strncmp(text, "spfrage=", 8) == 0) {             // Startplatz-Frage (nur am Boden)
     if (imFlug) { antwort("S,9"); return; }
-    char* trenn = strchr(text + 8, '|');
+    char* trenn = strchr(text + 8, '|');           // "186|Name|S/SW"
     frageHoehe = atoi(text + 8);
+    char* trenn2 = trenn ? strchr(trenn + 1, '|') : NULL;
+    if (trenn2) *trenn2 = 0;
     strncpy(frageName, trenn ? trenn + 1 : "", sizeof(frageName) - 1);
     frageName[sizeof(frageName) - 1] = 0;
+    strncpy(frageRichtung, trenn2 ? trenn2 + 1 : "", sizeof(frageRichtung) - 1);
+    frageRichtung[sizeof(frageRichtung) - 1] = 0;
     frageBis = millis() + 30000;
     aktivJetzt();
     kurzerPiep(1200, 70); delay(50); kurzerPiep(1600, 90);

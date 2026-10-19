@@ -278,13 +278,14 @@
     ul.innerHTML = "";
     zeigen.forEach(x => {
       const li = document.createElement("li");
-      const wind = x.richtungen ? "Wind " + x.richtungen.replace(/\+/g, "★") : "";
-      li.innerHTML = `<span>${e(x.name)} · ${Math.round(x.hoehe)} m<br><span class="klein">${[km(x.m), wind].filter(Boolean).join(" · ")}</span></span>
+      const rose = x.richtungen && typeof windRose === "function" ? windRose(x.richtungen, 42) : "";
+      const wind = x.richtungen && typeof richtDeutsch === "function" ? "Start " + richtDeutsch(x.richtungen) : "";
+      li.innerHTML = `<span class="richtreihe">${rose}<span>${e(x.name)} · ${Math.round(x.hoehe)} m<br><span class="klein">${[km(x.m), e(wind)].filter(Boolean).join(" · ")}</span></span></span>
         <button class="spKarte">Karte</button><button class="merken">Speichern</button>`;
       li.querySelector(".spKarte").onclick = () => { location.href = "https://www.google.com/maps/search/?api=1&query=" + x.lat + "," + x.lon; };
       li.querySelector(".merken").onclick = () => {
         if (typeof startplaetze === "undefined") return;
-        const neu = { id: "sp" + Date.now().toString(36), name: x.name.slice(0, 30), hoehe: Math.round(x.hoehe), lat: x.lat, lon: x.lon };
+        const neu = { id: "sp" + Date.now().toString(36), name: x.name.slice(0, 30), hoehe: Math.round(x.hoehe), lat: x.lat, lon: x.lon, richtung: x.richtungen || "" };
         startplaetze.push(neu);
         if (speicherSchreiben(SP_KEY, startplaetze)) melden("„" + neu.name + "“ bei deinen Startplätzen gespeichert");
         spZeigen(neu.id);
@@ -295,7 +296,7 @@
     });
     document.getElementById("pgeListeInfo").textContent = !pgeDaten.length ? "Noch nichts geladen."
       : treffer.length > zeigen.length ? `${zeigen.length} von ${treffer.length} angezeigt – Suche eingrenzen.`
-      : `${treffer.length} Startplätze` + (pgeOrt ? ", nach Entfernung sortiert." : ".") + " ★ = gute Windrichtung.";
+      : `${treffer.length} Startplätze` + (pgeOrt ? ", nach Entfernung sortiert." : ".") + " Windrose: kräftig = gute Startrichtung, blass = möglich.";
   }
 
   function pgeInfo(text) {

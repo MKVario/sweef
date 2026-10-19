@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.25"
+#define FW_VERSION "2.10.26"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -95,6 +95,11 @@ float G_WARNUNG      = 0;      // g, ab hier Warnton (0 = aus)
 
 // Auto-Aus: nach so vielen Minuten ohne Bewegung am Boden ausschalten (0 = nie)
 int   AUTO_AUS_MIN       = 30;
+int   DISPLAY_AUS_MIN    = 0;      // Display am Boden aus nach ... Minuten ohne Tastendruck (0 = nie)
+bool  liveHintergrund    = false;  // App im Hintergrund: Live-Werte seltener senden
+bool  displayAus         = false;  // Display gerade zum Stromsparen aus
+unsigned long letzteTaste = 0;
+unsigned long schnellBis = 0;      // bis dahin schneller Bluetooth-Takt (Fluege uebertragen)
 
 // Flug-Funktionen
 float STARTPLATZ_NN      = 0;    // m ueber Meer, wo du die Hoehe nullst.
@@ -106,7 +111,8 @@ int   FLUG_START_DAUER_S = 10;   // s, so lange muss die Hoehe abweichen
 int   LANDUNG_RUHE_S     = 120;  // s ruhig auf gleicher Hoehe = gelandet
 int LIVE_MS = 500;                  // so oft gehen Live-Werte ans Handy (ms)
 int ZAHL_MS = 500;                  // Steigwert-Zahl auf dem Display: Mittel ueber ... ms
-const int   ANZEIGE_MS   = 40;    // neues Bild alle 40 ms (25 Bilder pro Sekunde)
+const int   ANZEIGE_MS   = 40;    // neues Bild alle 40 ms (25 Bilder pro Sekunde) im Flug
+int anzeigeTakt();                // am Boden seltener (spart Strom)
 
 // Pfeil im Hintergrund der Steigzahl
 bool  PFEIL_AN     = true;  // false = kein Pfeil
@@ -954,10 +960,12 @@ void messen() {
       }
     }
 
-    Serial.print("Steigen:");
-    Serial.print(v, 2);
-    Serial.print(",Beschl:");
-    Serial.println(letzteBeschl, 2);
+    if (Serial) {                             // nur wenn ein PC zuhoert
+      Serial.print("Steigen:");
+      Serial.print(v, 2);
+      Serial.print(",Beschl:");
+      Serial.println(letzteBeschl, 2);
+    }
   }
 }
 
@@ -1428,8 +1436,9 @@ int naechsteZeile = 8;                 // 8 Zeilen zu je 8 Pixel (128 x 64 Displ
 
 void anzeigeWeiter() {
   static unsigned long letztesBild = 0;
+  if (displayAus) return;
   if (naechsteZeile >= 8) {
-    if (millis() - letztesBild >= ANZEIGE_MS) {
+    if (millis() - letztesBild >= (unsigned long)anzeigeTakt()) {
       letztesBild = millis();
       bildZeichnen();
       naechsteZeile = 0;
@@ -1874,8 +1883,9 @@ int naechsteZeile = 16;                // 16 Zeilen zu je 8 Pixel
 int letzteZeile = 16;
 void anzeigeWeiter() {
   static unsigned long letztesBild = 0, letztesUnten = 0;
+  if (displayAus) return;
   if (naechsteZeile >= letzteZeile) {
-    if (millis() - letztesBild >= ANZEIGE_MS) {
+    if (millis() - letztesBild >= (unsigned long)anzeigeTakt()) {
       letztesBild = millis();
       bildZeichnen();
       naechsteZeile = 0;
@@ -2270,6 +2280,7 @@ Einstellung EINST[] = {
   {"gw", 'f', &G_WARNUNG,          0.0,   8.0},   // G-Warnung ab (g), 0 = aus
   {"la", 'i', &LIVE_MS,            100,  2000},   // Live-Werte ans Handy alle ... ms
   {"za", 'i', &ZAHL_MS,            100,  2000},   // Steigwert-Zahl am Display: Mittel ueber ... ms
+  {"ds", 'i', &DISPLAY_AUS_MIN,      0,    60},   // Display am Boden aus nach ... min (0 = nie)
 };
 const int ANZ_EINST = sizeof(EINST) / sizeof(EINST[0]);
 float standardWerte[ANZ_EINST];    // Grundeinstellung (fuer "reset")
@@ -2347,6 +2358,7 @@ void befehlAusfuehren(char* text, bool mitWirkung) {
         geaendert = true;
       } else if (mitWirkung && strcmp(teil, "fl_liste") == 0) {  // Flugliste senden
         sendeArt = 1; sendeIdx = 0;
+        schnellBis = millis() + 5000;
       } else if (mitWirkung && strcmp(teil, "fl_loeschen") == 0) {  // alle Fluege loeschen
         loeschenAngefordert = true;
       } else if (mitWirkung && strcmp(teil, "null") == 0) {    // Hoehe 0
@@ -2382,7 +2394,12 @@ void befehlAusfuehren(char* text, bool mitWirkung) {
       }
       continue;
     }
+    if (strcmp(name, "lb") == 0) {            // App im Hintergrund (nicht gespeichert)
+      liveHintergrund = wert > 0;
+      continue;
+    }
     if (strcmp(name, "fl_hol") == 0) {        // Flugdaten senden: "fl_hol=Nr@ab"
+      schnellBis = millis() + 5000;
       if (mitWirkung) {
         uint32_t nr = strtoul(gleich + 1, NULL, 10);
         char* at = strchr(gleich + 1, '@');
@@ -2602,7 +2619,15 @@ void befehlVomHandy(char* text) {
   befehlAusfuehren(text, true);
 }
 
-void verbundenCb(uint16_t verbindung) { neuVerbunden = true; }
+uint16_t verbHandle = BLE_CONN_HANDLE_INVALID;
+void verbundenCb(uint16_t verbindung) { neuVerbunden = true; verbHandle = verbindung; }
+// Bluetooth-Takt: im Normalfall 60 ms (spart Strom), zum Uebertragen der Fluege 15 ms
+int verbTakt = 0;
+void verbindungsTakt(int einheiten) {           // Einheiten zu 1,25 ms
+  if (verbTakt == einheiten || verbHandle == BLE_CONN_HANDLE_INVALID) return;
+  BLEConnection* c = Bluefruit.Connection(verbHandle);
+  if (c && c->requestConnectionParameter(einheiten)) verbTakt = einheiten;
+}
 void getrenntCb(uint16_t verbindung, uint8_t grund) { neuGetrennt = true; }
 
 void bluetoothStarten() {
@@ -2734,11 +2759,14 @@ void bluetoothArbeiten() {
   }
   if (neuVerbunden) {
     neuVerbunden = false;
+    verbTakt = 0; liveHintergrund = false;
     freigegeben = !pinAktiv();
     falscheVersuche = 0;
     einstAnHandy();
     infoAnHandy();
   }
+  if (Bluefruit.connected() && millis() > 3000)
+    verbindungsTakt((sendeArt != 0 || (long)(millis() - schnellBis) < 0) ? 12 : 48);
   if (loeschenAngefordert) flugspeicherLoeschen();
   for (int i = 0; i < 3 && sendeArt != 0; i++) {
     if (!flugdatenSenden()) break;            // Puffer voll: spaeter weiter
@@ -2752,7 +2780,8 @@ void bluetoothArbeiten() {
   if (einstSpeichernUm && (long)(millis() - einstSpeichernUm) >= 0) einstSpeichern();
 
   static unsigned long letzteLive = 0;
-  if (Bluefruit.connected() && !gesperrt() && millis() - letzteLive >= (unsigned long)LIVE_MS) {
+  unsigned long liveTakt = liveHintergrund ? max(2000UL, (unsigned long)LIVE_MS) : (unsigned long)LIVE_MS;
+  if (Bluefruit.connected() && !gesperrt() && millis() - letzteLive >= liveTakt) {
     letzteLive = millis();
     char buf[150], z1[16], z2[16];
     zahlText(z1, sizeof(z1), vJetzt());
@@ -2861,6 +2890,15 @@ void tasterAbfragen() {
   static bool t1Erledigt = false, t2Erledigt = false, beideErledigt = false;
 
   bool t1 = taste1(), t2 = taste2();
+  if (t1 || t2) letzteTaste = millis();
+  if (displayAus && (t1 || t2)) {              // Display war aus: Taste weckt nur auf
+    while (taste1() || taste2()) messen();
+    delay(30);
+    letzteTaste = millis();
+    displaySparen();
+    t1Start = t2Start = beideStart = 0;
+    return;
+  }
   if (suchenLaeuft() && (t1 || t2)) {         // Vario gefunden: Ton aus
     suchenBis = millis();
     tonAktualisieren();
@@ -3041,6 +3079,27 @@ void loop() {
   if (speichernUm && (long)(millis() - speichernUm) >= 0) lautSpeichern();
   if (updateModusAb && (long)(millis() - updateModusAb) >= 0) updateModusStarten();
   if (frageBis && (!frageAktiv() || imFlug)) { frageBis = 0; antwort("S,2"); }   // keine Antwort / gestartet
+  displaySparen();
+  // Kurz schlafen: der Prozessor wartet stromsparend auf den naechsten Messwert
+  // (Drucksensor 32/s, Lagesensor 104/s). Bei Ton-Test und Suche nicht.
+  if (!suchenLaeuft()) delay(2);
+}
+
+int anzeigeTakt() { return imFlug ? ANZEIGE_MS : 100; }   // am Boden 10 Bilder pro Sekunde
+
+// Display am Boden nach DISPLAY_AUS_MIN Minuten ohne Tastendruck aus; im Flug,
+// bei Warnungen, Fragen oder Suche immer an.
+void displaySparen() {
+  bool aus = DISPLAY_AUS_MIN > 0 && !imFlug && !frageAktiv() && !suchenLaeuft() && !usbSteckt() &&
+             !(warnBis && (long)(millis() - warnBis) < 0) &&
+             millis() - letzteTaste > (unsigned long)DISPLAY_AUS_MIN * 60000UL;
+  if (aus && !displayAus) { anzeige.setPowerSave(1); displayAus = true; }
+  else if (!aus && displayAus) {
+    displayAus = false;
+    anzeige.setPowerSave(0);
+    anzeige.setContrast(kontrast());
+    naechsteZeile = 99;                          // gleich neues Bild
+  }
 }
 
 // Firmware-Update per Bluetooth: Einstellungen sichern, dann in den Bootloader.

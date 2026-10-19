@@ -97,6 +97,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (Startplaetze.frei) VarioBle.befehlSenden("lb=0")   // Live-Werte wieder im normalen Takt
         // App kommt (wieder) in den Vordergrund: Seite darf nach Updates schauen
         zurJs("_ereignis", JSONObject.quote("vordergrund"), "{}")
     }
@@ -104,6 +105,7 @@ class MainActivity : Activity() {
     override fun onPause() {
         super.onPause()
         Kompass.stoppen()                 // Sensor nicht im Hintergrund laufen lassen
+        if (Startplaetze.frei) VarioBle.befehlSenden("lb=1")   // Vario: Live-Werte seltener (spart Strom)
         zurJs("_ereignis", JSONObject.quote("pause"), "{}")
     }
 

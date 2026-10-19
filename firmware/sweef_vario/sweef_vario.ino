@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.24"
+#define FW_VERSION "2.10.25"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -2628,7 +2628,7 @@ void bluetoothStarten() {
 
   chrLive.setProperties(CHR_PROPS_NOTIFY);
   chrLive.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-  chrLive.setMaxLen(120);
+  chrLive.setMaxLen(150);
   chrLive.begin();
 
   chrDaten.setProperties(CHR_PROPS_NOTIFY);
@@ -2754,15 +2754,16 @@ void bluetoothArbeiten() {
   static unsigned long letzteLive = 0;
   if (Bluefruit.connected() && !gesperrt() && millis() - letzteLive >= (unsigned long)LIVE_MS) {
     letzteLive = millis();
-    char buf[120], z1[16], z2[16];
+    char buf[150], z1[16], z2[16];
     zahlText(z1, sizeof(z1), vJetzt());
     zahlText(z2, sizeof(z2), hoeheNN());
     unsigned long minuten = flugGewesen ? flugDauerMs / 60000UL : 0;
-    int n = snprintf(buf, sizeof(buf), "v=%s;h=%ld;nn=%s;mx=%ld;ls=%d;fl=%d;t=%lu;imu=%d;ak=%d;ld=%d;gb=%d;g=%d;gm=%d",
+    int n = snprintf(buf, sizeof(buf), "v=%s;h=%ld;nn=%s;mx=%ld;ls=%d;fl=%d;t=%lu;imu=%d;ak=%d;ld=%d;gb=%d;g=%d;gm=%d;av=%d;us=%d",
                      z1, lroundf(h), z2, lroundf(maxHoehe), lautStufe,
                      imFlug ? 1 : 0, minuten, imuOk ? 1 : 0,
                      akkuProzent(), (usbSteckt() && laedt()) ? 1 : 0, bodenStumm() ? 1 : 0,
-                     (int)lroundf(gWert * 10), (int)lroundf(gMaxFlug * 10));
+                     (int)lroundf(gWert * 10), (int)lroundf(gMaxFlug * 10),
+                     (int)lroundf(akkuV * 1000), usbSteckt() ? 1 : 0);   // av = Akkuspannung in mV
     chrLive.notify(buf, n);
   }
 }

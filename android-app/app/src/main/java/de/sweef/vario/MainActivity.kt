@@ -243,6 +243,9 @@ class MainActivity : Activity() {
         /** GPS-Punkte eines Zeitraums: "zeit_ms,lat,lon,hoehe;..." */
         @JavascriptInterface fun spur(von: Double, bis: Double): String = GpsSpur.abschnitt(von.toLong(), bis.toLong())
 
+        /** "Wo ist mein Vario?": {"lat","lon","genau","zeit","name"} oder "" */
+        @JavascriptInterface fun zuletztGesehen(): String = VarioOrt.lesen(this@MainActivity)
+
         /** Datei teilen (Google Earth, WhatsApp, Drive …) */
         @JavascriptInterface fun teilen(name: String, inhalt: String, typ: String) = runOnUiThread {
             try {

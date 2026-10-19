@@ -187,6 +187,26 @@
       <div class="schalter" id="appAkkuZeile" style="cursor:default"><span><b>Akku-Optimierung</b><small>Ausschalten, damit die Verbindung im Hintergrund nicht abreißt.</small></span><button id="appAkku">Ausschalten</button></div>`;
     seite.insertBefore(a, seite.firstChild);
     seite.insertBefore(s, seite.firstChild);
+    const w = document.createElement("section");
+    w.id = "woIstVario";
+    w.hidden = true;
+    w.innerHTML = `
+      <h2>Wo ist mein Vario?</h2>
+      <p class="hint" id="woText" style="margin-bottom:10px"></p>
+      <canvas class="karte" id="woKarte" style="height:220px" role="img" aria-label="Karte: hier war das Vario zuletzt verbunden"></canvas>
+      <p class="note" style="margin:6px 0 0">Orange: Vario zuletzt gesehen · Weiß: du · Karte © OpenStreetMap-Mitwirkende</p>
+      <div class="knopfreihe">
+        <button class="primary" id="woHin">Hinführen (Google Maps)</button>
+      </div>
+      <p class="note" style="margin:0 0 4px">In der Nähe: verbinden und unter „Vario suchen“ piepen lassen.</p>`;
+    seite.insertBefore(w, seite.firstChild);
+    document.getElementById("woHin").onclick = () => {
+      const z = zuletzt();
+      if (z) location.href = "https://www.google.com/maps/dir/?api=1&travelmode=walking&destination=" + z.lat + "," + z.lon;
+    };
+    setInterval(woZeigen, 5000);
+    document.getElementById("tab_geraet").addEventListener("click", () => setTimeout(woZeigen, 50));
+    woZeigen();
 
     const tempo = document.getElementById("appTempo");
     tempo.checked = N.tempoAn();
@@ -201,6 +221,87 @@
     setTimeout(versionenPruefen, 3000);               // kurz nach dem Start
     setInterval(versionenPruefen, 6 * 3600 * 1000);    // und alle 6 Stunden
     statusZeigen();
+  }
+
+  // ---------------- Wo ist mein Vario? ----------------
+  function zuletzt() { try { const t = N.zuletztGesehen && N.zuletztGesehen(); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
+  let ich = null, ichHolen = 0;
+  function abstand(a, b) {
+    const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+    return 12742000 * Math.asin(Math.sqrt(h));
+  }
+  function richtung(a, b) {
+    const r = Math.PI / 180, y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r);
+    const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
+    const g = (Math.atan2(y, x) / r + 360) % 360;
+    return ["Norden", "Nordosten", "Osten", "Südosten", "Süden", "Südwesten", "Westen", "Nordwesten"][Math.round(g / 45) % 8];
+  }
+  function woZeigen() {
+    const box = document.getElementById("woIstVario");
+    if (!box) return;
+    const z = zuletzt();
+    const seiteSichtbar = !document.getElementById("seite_geraet").hidden;
+    box.hidden = !z || N.istVerbunden();
+    if (box.hidden || !seiteSichtbar) return;
+    // eigene Position (hoechstens alle 5 s fragen)
+    if (navigator.geolocation && Date.now() - ichHolen > 5000) {
+      ichHolen = Date.now();
+      navigator.geolocation.getCurrentPosition(p => { ich = { lat: p.coords.latitude, lon: p.coords.longitude }; woZeigen(); },
+        () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 });
+    }
+    const d = new Date(z.zeit), heute = new Date().toDateString() === d.toDateString();
+    const wann = (heute ? "heute " : d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" }) + " ") +
+      d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    let text = z.name + " war zuletzt " + wann + " verbunden.";
+    if (ich) {
+      const m = abstand(ich, z);
+      text += m < 20 ? " Du bist ganz in der Nähe." :
+        " Etwa " + (m < 1000 ? Math.round(m / 10) * 10 + " m" : (m / 1000).toFixed(1).replace(".", ",") + " km") + " Richtung " + richtung(ich, z) + ".";
+    }
+    text += " Es liegt meist im orangen Kreis (± 50 m).";
+    document.getElementById("woText").textContent = text;
+    woKarte(z, ich);
+  }
+  const kachelSpeicher = {};
+  function woKarte(z, ich) {
+    const c = document.getElementById("woKarte"), dpr = window.devicePixelRatio || 1;
+    const B = c.clientWidth, H = c.clientHeight;
+    if (!B) return;
+    c.width = B * dpr; c.height = H * dpr;
+    const g = c.getContext("2d"); g.scale(dpr, dpr);
+    const welt = (lat, lon, s) => { const r = lat * Math.PI / 180; return [(lon + 180) / 360 * s, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * s]; };
+    // Zoom: beide Punkte sichtbar, hoechstens Stufe 17
+    let zoom = 17;
+    if (ich) {
+      while (zoom > 3) {
+        const s = 256 * Math.pow(2, zoom), a = welt(z.lat, z.lon, s), b = welt(ich.lat, ich.lon, s);
+        if (Math.abs(a[0] - b[0]) < B - 60 && Math.abs(a[1] - b[1]) < H - 60) break;
+        zoom--;
+      }
+    }
+    const s = 256 * Math.pow(2, zoom);
+    const a = welt(z.lat, z.lon, s), b = ich ? welt(ich.lat, ich.lon, s) : a;
+    const ox = (a[0] + b[0]) / 2 - B / 2, oy = (a[1] + b[1]) / 2 - H / 2;
+    const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    const malen = () => {
+      g.fillStyle = css("--chip"); g.fillRect(0, 0, B, H);
+      for (let tx = Math.floor(ox / 256); tx <= Math.floor((ox + B) / 256); tx++)
+        for (let ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++) {
+          const k = zoom + "/" + tx + "/" + ty;
+          let img = kachelSpeicher[k];
+          if (!img) { img = kachelSpeicher[k] = new Image(); img.onload = malen; img.src = "https://tile.openstreetmap.org/" + k + ".png"; }
+          if (img.complete && img.naturalWidth) g.drawImage(img, tx * 256 - ox, ty * 256 - oy);
+        }
+      const punkt = (p, fa, r) => { g.beginPath(); g.arc(p[0] - ox, p[1] - oy, r, 0, 7); g.fillStyle = fa; g.fill(); g.lineWidth = 2.5; g.strokeStyle = "#000"; g.stroke(); };
+      // Ungenauigkeit als Kreis
+      const mProPx = 40075016 * Math.cos(z.lat * Math.PI / 180) / s;
+      g.beginPath(); g.arc(a[0] - ox, a[1] - oy, Math.max(12, 50 / mProPx), 0, 7);
+      g.fillStyle = "rgba(255,162,76,.22)"; g.fill(); g.strokeStyle = css("--accent"); g.lineWidth = 1.5; g.stroke();
+      if (ich) punkt(b, "#ffffff", 7);
+      punkt(a, css("--accent"), 9);
+    };
+    malen();
   }
 
   function statusZeigen() {

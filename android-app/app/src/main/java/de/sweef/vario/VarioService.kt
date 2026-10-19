@@ -59,6 +59,9 @@ class VarioService : Service() {
     private val gps = object : LocationListener {
         override fun onLocationChanged(l: Location) {
             val alt = (SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000_000.0
+            if (alt <= 3 && (!l.hasAccuracy() || l.accuracy < 50)) {
+                if (VarioBle.bereit) VarioOrt.fix(l.latitude, l.longitude, l.accuracy, System.currentTimeMillis())
+            }
             if (alt <= 3 && (!l.hasAccuracy() || l.accuracy < 50))
                 GpsSpur.punkt(l.time, l.latitude, l.longitude, if (l.hasAltitude()) l.altitude else -9999.0)
             if (!l.hasSpeed() || alt > 3) { letztesTempo = -1f; return }

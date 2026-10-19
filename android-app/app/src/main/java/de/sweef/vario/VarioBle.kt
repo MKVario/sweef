@@ -182,6 +182,7 @@ object VarioBle {
         schliessen()
         val w = wartende.toList(); wartende.clear()
         w.forEach { it(false, "Verbindung abgebrochen") }
+        if (warBereit) VarioOrt.merken(ctx, name)
         if (warBereit) ereignis?.invoke("getrennt", JSONObject().put("absichtlich", absichtlich))
         if (absichtlich) VarioService.stoppen(ctx) else wiederverbindenPlanen()
     }

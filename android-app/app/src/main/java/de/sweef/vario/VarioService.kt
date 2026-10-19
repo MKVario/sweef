@@ -59,6 +59,8 @@ class VarioService : Service() {
     private val gps = object : LocationListener {
         override fun onLocationChanged(l: Location) {
             val alt = (SystemClock.elapsedRealtimeNanos() - l.elapsedRealtimeNanos) / 1_000_000_000.0
+            if (alt <= 3 && (!l.hasAccuracy() || l.accuracy < 50))
+                GpsSpur.punkt(l.time, l.latitude, l.longitude, if (l.hasAltitude()) l.altitude else -9999.0)
             if (!l.hasSpeed() || alt > 3) { letztesTempo = -1f; return }
             val kmh = l.speed * 3.6f
             letztesTempo = kmh
@@ -74,6 +76,7 @@ class VarioService : Service() {
     override fun onCreate() {
         super.onCreate()
         VarioBle.init(this)
+        GpsSpur.init(this)
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
             NotificationChannel(KANAL, "Verbindung zum Vario", NotificationManager.IMPORTANCE_LOW)
@@ -127,6 +130,7 @@ class VarioService : Service() {
         laeuft = false
         letztesTempo = -1f
         try { lm?.removeUpdates(gps) } catch (_: Exception) {}
+        GpsSpur.schreiben()
         lm = null
         try { wach?.let { if (it.isHeld) it.release() } } catch (_: Exception) {}
         wach = null

@@ -43,6 +43,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VarioBle.init(this)
+        GpsSpur.init(this)
 
         val lader = WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
@@ -237,6 +238,21 @@ class MainActivity : Activity() {
                 zurJs("_ereignis", JSONObject.quote("appupdate"),
                     JSONObject().put("text", text).put("ende", ende).toString())
             }
+        }
+
+        /** GPS-Punkte eines Zeitraums: "zeit_ms,lat,lon,hoehe;..." */
+        @JavascriptInterface fun spur(von: Double, bis: Double): String = GpsSpur.abschnitt(von.toLong(), bis.toLong())
+
+        /** Datei teilen (Google Earth, WhatsApp, Drive …) */
+        @JavascriptInterface fun teilen(name: String, inhalt: String, typ: String) = runOnUiThread {
+            try {
+                val ordner = File(cacheDir, "teilen").apply { mkdirs() }
+                val datei = File(ordner, name).apply { writeText(inhalt, Charsets.UTF_8) }
+                val uri = androidx.core.content.FileProvider.getUriForFile(this@MainActivity, "de.sweef.vario.dateien", datei)
+                val i = Intent(Intent.ACTION_SEND).setType(typ.substringBefore(";").ifBlank { "application/octet-stream" })
+                    .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                startActivity(Intent.createChooser(i, name))
+            } catch (_: Exception) {}
         }
 
         /** Datei in "Download/Sweef" speichern (Sicherung, CSV) */

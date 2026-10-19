@@ -160,6 +160,7 @@ p.hint { margin: 0 0 8px; font-size: .88rem; color: var(--muted); max-width: 60c
 .werte .w.up { color: var(--steigen); }
 .werte .w.down { color: var(--sinken); }
 .kurve { width: 100%; height: 240px; display: block; }
+.karte { width: 100%; height: 300px; display: block; border-radius: 14px; background: var(--chip); }
 .melden { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(92px + env(safe-area-inset-bottom, 0px));
   background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: .92rem; max-width: calc(100% - 32px); z-index: 60; }
 body.getrennt .braucht-vario { opacity: .5; pointer-events: none; }
@@ -314,6 +315,16 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
       <div class="werte" id="dWerte"></div>
       <canvas class="kurve" id="kurve" role="img" aria-label="Höhenkurve des Flugs"></canvas>
       <p class="note" id="kurveLegende">Linie: Höhe über Startplatz. Balken unten: Steigen (grün) und Sinken (rot), über 10 Sekunden gemittelt.</p>
+      <div id="karteBox" hidden>
+        <h2>Flugweg</h2>
+        <canvas class="karte" id="karte" role="img" aria-label="Karte mit dem Flugweg"></canvas>
+        <p class="note">Farbe: Steigen grün, Sinken rot · Karte © OpenStreetMap-Mitwirkende</p>
+        <div class="knopfreihe">
+          <button class="primary" id="kml">Google Earth (KML)</button>
+          <button id="igc">IGC für XContest</button>
+        </div>
+      </div>
+      <p class="note" id="keineSpur" hidden></p>
       <div class="confirm" id="flugLoeschenBox"></div>
     </section>
 
@@ -1059,7 +1070,7 @@ async function listeZeigen() {
     const li = document.createElement("li");
     li.innerHTML = `<button><span class="datum">${datumText(f)}</span><span class="dauer">${dauerText(a.dauer)}</span>
       <span class="balken" aria-hidden="true">${verlauf(f, a)}</span>
-      <span class="klein">max. ${Math.round(a.max)} m · bestes Steigen ${zahl(a.best, 0.1)} m/s · ${Math.round(a.gewinn)} Hm${f.gmax ? ` · ${zahl(f.gmax, 0.1)} g` : ""}</span></button>`;
+      <span class="klein">max. ${Math.round(a.max)} m · bestes Steigen ${zahl(a.best, 0.1)} m/s · ${Math.round(a.gewinn)} Hm${f.gmax ? ` · ${zahl(f.gmax, 0.1)} g` : ""}${f.spur ? " · mit Flugweg" : ""}</span></button>`;
     li.querySelector("button").onclick = () => detailZeigen(f);
     ul.appendChild(li);
   });
@@ -1084,6 +1095,15 @@ function detailZeigen(f) {
   if (f.gmax) w.push(["max. G-Last", zahl(f.gmax, 0.1) + " g", ""]);
   $("dWerte").innerHTML = w.map(([l, v, c]) => `<div><span class="lbl">${l}</span><span class="w ${c}">${v}</span></div>`).join("");
   kurveZeichnen(f, a);
+  if (!f.spur) {
+    const spur = spurHolen(f);
+    if (spur) { f.spur = spur; dbSchreiben(f).catch(() => {}); }
+  }
+  $("karteBox").hidden = !f.spur;
+  $("keineSpur").hidden = !!f.spur;
+  $("keineSpur").textContent = !window.SweefNative ? "Flugweg und Google-Earth-Datei gibt es nur mit der Android-App (sie zeichnet das GPS vom Handy auf)."
+    : !f.startGenau ? "Kein Flugweg: die Startzeit dieses Flugs ist unbekannt." : "Kein Flugweg: während dieses Flugs war das Handy nicht mit dem Vario verbunden oder hatte kein GPS.";
+  if (f.spur) karteZeichnen(f);
   bestaetigenBox($("flugLoeschenBox"), "Flug vom Handy löschen", "Diesen Flug wirklich vom Handy löschen?", "Ja, löschen", async () => {
     await dbLoeschen(f.key); melden("Flug gelöscht"); zurueck();
   });
@@ -1091,7 +1111,147 @@ function detailZeigen(f) {
 }
 function zurueck() { $("flugDetail").hidden = true; $("flugUebersicht").hidden = false; listeZeigen(); }
 $("zurueck").onclick = zurueck;
-window.addEventListener("resize", () => { if (aktuellerFlug && !$("flugDetail").hidden) kurveZeichnen(aktuellerFlug, aktuellerFlug.werte || auswerten(aktuellerFlug)); });
+window.addEventListener("resize", () => { if (aktuellerFlug && !$("flugDetail").hidden) { kurveZeichnen(aktuellerFlug, aktuellerFlug.werte || auswerten(aktuellerFlug)); if (aktuellerFlug.spur) karteZeichnen(aktuellerFlug); } });
+
+// ================================================================
+// Flugweg (GPS vom Handy, nur in der Android-App)
+// ================================================================
+// f.spur = [[sekunde_im_flug, breite, laenge, gps_hoehe], ...]
+function spurHolen(f) {
+  const N = window.SweefNative;
+  if (!N || !N.spur || !f.start || !f.startGenau) return null;
+  let roh = "";
+  try { roh = N.spur(f.start - 2000, f.start + f.hoehe.length * 1000 + 2000); } catch (e) { return null; }
+  if (!roh) return null;
+  const spur = [];
+  let letzte = -1;
+  roh.split(";").forEach(z => {
+    const t = z.split(",");
+    const sek = Math.round((+t[0] - f.start) / 1000);
+    if (sek <= letzte || sek < 0 || sek >= f.hoehe.length) return;
+    letzte = sek;
+    spur.push([sek, +(+t[1]).toFixed(6), +(+t[2]).toFixed(6), +t[3]]);
+  });
+  return spur.length >= 10 ? spur : null;
+}
+
+// Hoehe ueber Meer zu einer Sekunde: Vario-Hoehe + Startplatzhoehe;
+// ohne Startplatzhoehe wird die Vario-Hoehe am GPS ausgerichtet
+function nnVersatz(f) {
+  if (f.nn) return f.nn;
+  const d = f.spur.filter(p => p[3] > -9000).map(p => p[3] - f.hoehe[p[0]]).sort((a, b) => a - b);
+  return d.length ? d[Math.floor(d.length / 2)] : 0;
+}
+
+// ---- Karte ----
+const kacheln = {};
+function karteZeichnen(f) {
+  const c = $("karte"), dpr = window.devicePixelRatio || 1;
+  const B = c.clientWidth, H = c.clientHeight;
+  if (!B) return;
+  c.width = B * dpr; c.height = H * dpr;
+  const g = c.getContext("2d"); g.scale(dpr, dpr);
+  const welt = (lat, lon, z) => {
+    const s = 256 * Math.pow(2, z), r = lat * Math.PI / 180;
+    return [(lon + 180) / 360 * s, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * s];
+  };
+  // Zoom so waehlen, dass der Flugweg hineinpasst
+  const p0 = f.spur.map(p => welt(p[1], p[2], 0));
+  const xs = p0.map(p => p[0]), ys = p0.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const rand = 30;
+  const zf = Math.log2(Math.min((B - 2 * rand) / Math.max(maxX - minX, 1e-9), (H - 2 * rand) / Math.max(maxY - minY, 1e-9)));
+  const z = Math.max(3, Math.min(17, Math.floor(zf)));
+  const k = Math.max(1, Math.min(2, Math.pow(2, zf - z)));     // Feinzoom zwischen zwei Stufen
+  const s = Math.pow(2, z) * k, T = 256 * k;
+  const mx = (minX + maxX) / 2 * s, my = (minY + maxY) / 2 * s;
+  const ox = mx - B / 2, oy = my - H / 2;
+  const zeichnen = () => {
+    g.fillStyle = farbe("--chip"); g.fillRect(0, 0, B, H);
+    for (let tx = Math.floor(ox / T); tx <= Math.floor((ox + B) / T); tx++)
+      for (let ty = Math.floor(oy / T); ty <= Math.floor((oy + H) / T); ty++) {
+        const k = `${z}/${tx}/${ty}`;
+        let img = kacheln[k];
+        if (!img) {
+          img = kacheln[k] = new Image();
+          img.onload = () => { if (aktuellerFlug === f) zeichnen(); };
+          img.src = `https://tile.openstreetmap.org/${k}.png`;
+        }
+        if (img.complete && img.naturalWidth) g.drawImage(img, tx * T - ox, ty * T - oy, T + 0.5, T + 0.5);
+      }
+    // Weg, eingefaerbt nach Steigen
+    const pt = p0.map(w => [w[0] * s - ox, w[1] * s - oy]);
+    const gruen = farbe("--steigen"), rot = farbe("--sinken");
+    g.lineCap = "round"; g.lineJoin = "round";
+    g.strokeStyle = "rgba(0,0,0,.55)"; g.lineWidth = 6;
+    g.beginPath(); pt.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.stroke();
+    g.lineWidth = 3.5;
+    for (let i = 1; i < pt.length; i++) {
+      const sek = f.spur[i][0], v = sek >= 10 ? (f.hoehe[sek] - f.hoehe[sek - 10]) / 10 : 0;
+      g.strokeStyle = v >= 0.2 ? gruen : v <= -1.5 ? rot : "#F5F1E8";
+      g.beginPath(); g.moveTo(pt[i - 1][0], pt[i - 1][1]); g.lineTo(pt[i][0], pt[i][1]); g.stroke();
+    }
+    const punkt = (q, fa) => { g.beginPath(); g.arc(q[0], q[1], 6, 0, 7); g.fillStyle = fa; g.fill(); g.lineWidth = 2; g.strokeStyle = "#000"; g.stroke(); };
+    punkt(pt[0], farbe("--accent")); punkt(pt[pt.length - 1], "#ffffff");
+  };
+  zeichnen();
+}
+
+// ---- Dateien fuer Google Earth und XContest ----
+function dateiAusgeben(name, inhalt, typ) {
+  herunterladen(name, inhalt, typ);                     // in der App: Download/Sweef
+  if (window.SweefNative && SweefNative.teilen) SweefNative.teilen(name, inhalt, typ);
+}
+function kmlText(f) {
+  const v = nnVersatz(f), a = f.werte || auswerten(f);
+  const koord = f.spur.map(p => `${p[2]},${p[1]},${Math.round(f.hoehe[p[0]] + v)}`).join("\n");
+  const titel = "Sweef " + datumText(f);
+  const start = f.spur[0], ende = f.spur[f.spur.length - 1];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+<name>${esc(titel)}</name>
+<description>Dauer ${dauerText(a.dauer)} · max. ${Math.round(a.maxNN || a.max + v)} m über Meer · bestes Steigen ${zahl(a.best, 0.1)} m/s</description>
+<Style id="weg"><LineStyle><color>ff4ca2ff</color><width>3</width></LineStyle><PolyStyle><color>554ca2ff</color></PolyStyle></Style>
+<Placemark><name>Flugweg</name><styleUrl>#weg</styleUrl>
+<LineString><extrude>1</extrude><tessellate>1</tessellate><altitudeMode>absolute</altitudeMode>
+<coordinates>
+${koord}
+</coordinates></LineString></Placemark>
+<Placemark><name>Start</name><Point><altitudeMode>absolute</altitudeMode><coordinates>${start[2]},${start[1]},${Math.round(f.hoehe[start[0]] + v)}</coordinates></Point></Placemark>
+<Placemark><name>Landung</name><Point><altitudeMode>absolute</altitudeMode><coordinates>${ende[2]},${ende[1]},${Math.round(f.hoehe[ende[0]] + v)}</coordinates></Point></Placemark>
+</Document>
+</kml>`;
+}
+function igcText(f) {
+  const v = nnVersatz(f), d = new Date(f.start);
+  const zz = (n, l) => String(Math.abs(Math.round(n))).padStart(l, "0");
+  const grad = (w, l, pos, neg) => {
+    const a = Math.abs(w), g = Math.floor(a), m = (a - g) * 60000;
+    return zz(g, l) + zz(m, 5) + (w >= 0 ? pos : neg);
+  };
+  const hoehe = h => (h < 0 ? "-" + zz(-h, 4) : zz(h, 5));
+  const z = [
+    "AXSWSweef",
+    "HFDTEDATE:" + zz(d.getUTCDate(), 2) + zz(d.getUTCMonth() + 1, 2) + zz(d.getUTCFullYear() % 100, 2) + ",01",
+    "HFPLTPILOTINCHARGE:",
+    "HFGTYGLIDERTYPE:",
+    "HFGIDGLIDERID:",
+    "HFDTMGPSDATUM:WGS84",
+    "HFFTYFRTYPE:Sweef,Vario mit Handy-GPS",
+    "HFALGALTGPS:GEO",
+    "HFALPALTPRESSURE:ISA",
+  ];
+  f.spur.forEach(p => {
+    const t = new Date(f.start + p[0] * 1000);
+    const baro = Math.round(f.hoehe[p[0]] + v), gps = p[3] > -9000 ? Math.round(p[3]) : baro;
+    z.push("B" + zz(t.getUTCHours(), 2) + zz(t.getUTCMinutes(), 2) + zz(t.getUTCSeconds(), 2) +
+      grad(p[1], 2, "N", "S") + grad(p[2], 3, "E", "W") + "A" + hoehe(baro) + hoehe(gps));
+  });
+  return z.join("\r\n") + "\r\n";
+}
+$("kml").onclick = () => { const f = aktuellerFlug; if (f && f.spur) dateiAusgeben(dateiName(f) + ".kml", kmlText(f), "application/vnd.google-earth.kml+xml"); };
+$("igc").onclick = () => { const f = aktuellerFlug; if (f && f.spur) dateiAusgeben(dateiName(f) + ".igc", igcText(f), "application/octet-stream"); };
 
 function farbe(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 function kurveZeichnen(f, a) {
@@ -1300,6 +1460,8 @@ $("laden").onclick = async () => {
       const hoehe = Array.from(roh, w => Math.round((w - 32768)) / 10);
       const flug = { key: schluessel(vf), nr: vf.nr, start: z.start, startGenau: z.genau, vor: vf.vor, nn: vf.nn, hoehe, geladen: Date.now() };
       if (vf.gmax) flug.gmax = vf.gmax;
+      const spur = spurHolen(flug);
+      if (spur) flug.spur = spur;
       flug.werte = auswerten(flug);
       await dbSchreiben(flug);
       laden.erledigt += vf.anzahl; laden.da = 0; fortschritt();

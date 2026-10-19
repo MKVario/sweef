@@ -78,8 +78,8 @@
       const hg = document.createElement("div");
       hg.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:999;display:flex;align-items:center;justify-content:center;padding:16px";
       const box = document.createElement("div");
-      box.style.cssText = "background:#13232a;color:#e8f1f2;border-radius:12px;padding:16px;width:100%;max-width:360px;font:inherit";
-      box.innerHTML = "<h2 style='margin:0 0 10px'>Vario auswählen</h2>";
+      box.style.cssText = "background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:18px;padding:16px;width:100%;max-width:360px;font:inherit";
+      box.innerHTML = "<h2 style='margin:0 0 10px;font:700 1.3rem var(--f-display)'>Vario auswählen</h2>";
       if (!liste.length) {
         box.insertAdjacentHTML("beforeend", "<p>Kein Sweef gefunden. Ist das Vario eingeschaltet und in der Nähe?</p>");
       }
@@ -165,35 +165,38 @@
     const s = document.createElement("section");
     s.id = "appBereich";
     s.innerHTML = `
-      <h2>App</h2>
-      <div class="feld">
-        <label style="display:flex;gap:10px;align-items:center">
-          <input type="checkbox" id="appTempo"> Geschwindigkeit (GPS) ans Vario senden
-        </label>
-        <div class="note" id="appTempoInfo"></div>
+      <h2>Updates</h2>
+      <div class="schalter" style="cursor:default">
+        <span><b>Sweef-App</b><small id="appVersion"></small></span>
+        <button id="appNeu" class="primary" hidden>Installieren</button>
       </div>
-      <div class="feld">
-        <div class="note">Damit die Verbindung im Hintergrund nicht abreißt, sollte die Akku-Optimierung für die Sweef-App aus sein.</div>
-        <div><button id="appAkku">Akku-Optimierung ausschalten</button></div>
+      <div class="schalter" style="cursor:default">
+        <span><b>Vario-Firmware</b><small id="fwInfo">Mit dem Vario verbinden, dann nach Updates suchen.</small></span>
       </div>
-      <h2>Firmware-Update</h2>
-      <p class="hint" id="fwInfo">Mit dem Vario verbinden, dann nach Updates suchen.</p>
       <div class="fortschritt" id="fwBalken" hidden><i></i></div>
       <div class="knopfreihe">
         <button id="fwSuchen">Nach Update suchen</button>
         <button class="primary" id="fwStart" hidden>Jetzt aktualisieren</button>
       </div>
-      <p class="note">Das Update dauert 1–2 Minuten. Vario dabei eingeschaltet und nah am Handy lassen. Bricht es ab, einfach nochmal starten.</p>
-      <p class="note" id="appVersion"></p>`;
+      <p class="note" style="margin:0 0 4px">Das Update dauert 2–3 Minuten. Vario dabei eingeschaltet und nah am Handy lassen. Bricht es ab, einfach nochmal starten.</p>`;
+    const a = document.createElement("section");
+    a.id = "appEinst";
+    a.innerHTML = `
+      <h2>App</h2>
+      <label class="schalter"><span><b>GPS-Tempo ans Vario</b><small id="appTempoInfo"></small></span><input type="checkbox" class="switch" id="appTempo"></label>
+      <div class="schalter" id="appAkkuZeile" style="cursor:default"><span><b>Akku-Optimierung</b><small>Ausschalten, damit die Verbindung im Hintergrund nicht abreißt.</small></span><button id="appAkku">Ausschalten</button></div>`;
+    seite.insertBefore(a, seite.firstChild);
     seite.insertBefore(s, seite.firstChild);
 
     const tempo = document.getElementById("appTempo");
     tempo.checked = N.tempoAn();
     tempo.onchange = () => N.tempoSetzen(tempo.checked);
     document.getElementById("appAkku").onclick = () => N.akkuOptimierungAus();
-    document.getElementById("appVersion").textContent = "Sweef-App " + N.appVersion();
+    document.getElementById("appVersion").textContent = N.appVersion() + " · auf dem Handy";
+    document.getElementById("appNeu").onclick = () => { if (neueste && neueste.appUrl) N.appInstallieren(neueste.appUrl); };
     document.getElementById("fwSuchen").onclick = fwSuchen;
     document.getElementById("fwStart").onclick = fwStarten;
+    document.getElementById("appTempo").addEventListener("change", statusZeigen);
     setInterval(statusZeigen, 1000);
     setTimeout(versionenPruefen, 3000);               // kurz nach dem Start
     setInterval(versionenPruefen, 6 * 3600 * 1000);    // und alle 6 Stunden
@@ -209,8 +212,15 @@
       const t = N.tempo();
       info.textContent = t < 0 ? "Warte auf GPS-Signal …" : "Aktuell " + Math.round(t) + " km/h";
     }
-    const akku = document.getElementById("appAkku");
+    const akku = document.getElementById("appAkkuZeile");
     if (akku) akku.hidden = N.akkuFrei();
+    // GPS-Tempo auch in der Live-Karte
+    const box = document.getElementById("lgsBox"), gs = document.getElementById("lgs");
+    if (box && gs) {
+      const t = N.tempo(), an = N.tempoAn();
+      box.hidden = !an;
+      gs.textContent = t < 0 ? "–" : Math.round(t) + " km/h";
+    }
   }
 
   // Versionen vergleichen: "2.10.18" < "2.10.19"
@@ -299,15 +309,15 @@
     if (!l) {
       l = document.createElement("div");
       l.id = "hinweisLeiste";
-      l.style.cssText = "position:sticky;top:0;z-index:50;background:#0b7480;color:#fff;padding:10px 12px;border-radius:10px;margin:8px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap";
-      const ziel = document.querySelector(".reiter");
-      if (ziel) ziel.parentNode.insertBefore(l, ziel); else document.body.prepend(l);
+      l.className = "hinweis";
+      const ziel = document.getElementById("display");
+      if (ziel) ziel.parentNode.insertBefore(l, ziel.nextSibling); else document.body.prepend(l);
     }
     l.innerHTML = "";
     const t = document.createElement("span");
     t.id = "hinweisText"; t.style.flex = "1"; t.textContent = text;
     const b = document.createElement("button");
-    b.className = "primary"; b.textContent = knopf; b.onclick = aktion;
+    b.textContent = knopf; b.onclick = aktion;
     const x = document.createElement("button");
     x.textContent = "Später"; x.onclick = () => { l.remove(); if (wegKlick) wegKlick(); };
     l.append(t, b, x);
@@ -316,7 +326,11 @@
   async function versionenPruefen() {
     letztePruefung = Date.now();
     try { neueste = JSON.parse(await rufen("versionenPruefen")); } catch (e) { return; }
-    if (neueste.app > 0 && neueste.app > neueste.eigene && neueste.appUrl) {
+    const appNeu = document.getElementById("appNeu"), appV = document.getElementById("appVersion");
+    const istNeu = neueste.app > 0 && neueste.app > neueste.eigene && neueste.appUrl;
+    if (appNeu) appNeu.hidden = !istNeu;
+    if (appV) appV.textContent = N.appVersion() + (istNeu ? " → 1.0." + neueste.app + " ist da" : " · aktuell");
+    if (istNeu) {
       hinweisLeiste("Neue Sweef-App 1.0." + neueste.app + " ist da.", "Installieren",
         () => N.appInstallieren(neueste.appUrl));
     }
@@ -339,7 +353,7 @@
   // Hinweis unten auf der Seite anpassen
   function hinweisAnpassen() {
     document.querySelectorAll("p.note").forEach(p => {
-      if (p.textContent.indexOf("Funktioniert in Chrome") === 0) p.textContent = "Sweef-App für Android.";
+      if (p.textContent.indexOf("Funktioniert in Chrome") === 0) p.textContent = "Sweef-App " + N.appVersion() + " für Android";
     });
   }
 

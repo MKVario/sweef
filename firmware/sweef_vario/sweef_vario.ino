@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.32"
+#define FW_VERSION "2.10.33"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -794,6 +794,10 @@ void flugspeicherStarten() {
   // bis zu 6 Versuche: wecken, Speicher-Reset, erkennen (mit Pausen,
   // damit sich der Speicher nach einem Spannungs-Wackler fangen kann)
   delay(10);
+  // Erst den Chip direkt an den Leitungen zuruecksetzen: nach einem Neustart
+  // mit USB-Kabel reagiert er sonst nicht auf die QSPI-Schnittstelle.
+  qspiAus();
+  speicherPerHand();
   for (int versuch = 0; versuch < 6 && !flashOk; versuch++) {
     if (versuch > 0) delay(20 * versuch);
     qspiAus();                                       // jedes Mal frisch starten

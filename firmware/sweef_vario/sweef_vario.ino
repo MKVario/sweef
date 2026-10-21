@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.30"
+#define FW_VERSION "2.10.31"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -729,18 +729,20 @@ void flugspeicherVorbereiten() {
   if (f.open("/logok", FILE_O_WRITE)) { f.write((uint8_t)1); f.close(); }
 }
 
-// QSPI-Schnittstelle ganz abschalten (auch wenn sie vom Bootloader oder
-// vor einem Neustart noch an ist). Erst dann lassen sich die Pins neu
-// zuweisen und der Treiber neu starten. Mit Nordic-Errata-122-Umgehung.
+// QSPI-Schnittstelle ganz abschalten und zuruecksetzen (auch wenn sie vom
+// Bootloader - z. B. mit USB-Kabel - noch eingeschaltet ist). Danach lassen
+// sich Pins und Einstellungen neu setzen und der Treiber startet sauber.
 void qspiAus() {
   flashTransport.end();                              // Treiber freigeben (falls an)
   if (NRF_QSPI->ENABLE) {
     NRF_QSPI->TASKS_DEACTIVATE = 1;
-    *(volatile uint32_t*)0x40029010ul = 1;
-    *(volatile uint32_t*)0x40029054ul = 1;
     delay(1);
     NRF_QSPI->ENABLE = 0;
   }
+  // Baustein kurz stromlos schalten: setzt alle QSPI-Register zurueck
+  *(volatile uint32_t*)0x40029FFCul = 0;
+  delay(1);
+  *(volatile uint32_t*)0x40029FFCul = 1;
 }
 
 void flugspeicherStarten() {

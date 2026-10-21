@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.33"
+#define FW_VERSION "2.10.34"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -168,6 +168,36 @@ Adafruit_DPS310 dps;
 U8G2_SSD1306_128X64_NONAME_F_HW_I2C anzeige(U8G2_R1, U8X8_PIN_NONE);   // altes 0,96" OLED 128x64, hochkant
 #else
 U8G2_SH1107_SEEED_128X128_F_HW_I2C anzeige(U8G2_R0, U8X8_PIN_NONE);   // 1,5" OLED 128x128
+
+// ---- Eigene Platine v5 (wird am INA226 auf 0x40 erkannt) ----
+// Dort haengt das nackte Displayglas: 13-V-Wandler an D7 (BOOST_EIN, mit
+// Pulldown) und Display-Reset an D6 (OLED_RES, mit Pulldown). Ohne die
+// beiden Leitungen bleibt das Display dunkel.
+const int PIN_OLED_RES  = D6;
+const int PIN_BOOST_EIN = D7;
+bool platine = false;
+
+bool platineErkennen() {
+  Wire.beginTransmission(0x40);
+  Wire.write(0xFE);                                   // INA226: Hersteller-ID
+  if (Wire.endTransmission() != 0) return false;
+  if (Wire.requestFrom(0x40, 2) < 2) return false;
+  uint16_t id = (Wire.read() << 8) | Wire.read();
+  return id == 0x5449;                                // "TI"
+}
+
+// Display an/aus. Auf der Platine mit 13-V-Wandler in der Reihenfolge laut
+// Datenblatt GME128128-02: an = VPP an, dann Display an; aus = Display aus,
+// dann VPP aus.
+void anzeigeStrom(bool an) {
+  if (an) {
+    if (platine) { digitalWrite(PIN_BOOST_EIN, HIGH); delay(5); }
+    anzeige.setPowerSave(0);
+  } else {
+    anzeige.setPowerSave(1);
+    if (platine) digitalWrite(PIN_BOOST_EIN, LOW);
+  }
+}
 #endif
 LSM6DS3 imu(I2C_MODE, 0x6A);
 
@@ -2238,7 +2268,7 @@ void tiefschlaf() {
   vollSichern();
   flugspeicherSchlafen();
   verstaerkerAus();                                // Verstaerker aus
-  anzeige.setPowerSave(1);                         // Display aus
+  anzeigeStrom(false);                         // Display aus
   if (sensorOk) dps.setMode(DPS310_IDLE);          // Drucksensor schlafen
   digitalWrite(PIN_LSM6DS3TR_C_POWER, LOW);        // Bewegungssensor aus
   warteTaste1Los();                                // sonst sofort wieder wach
@@ -2273,7 +2303,7 @@ bool einschaltAbfrage() {
   unsigned long start = millis();
   while (taste1()) {
     if (millis() - start >= HALTEN_AUS - 300) {    // ~0,3 s braucht der Start
-      anzeige.setPowerSave(0);
+      anzeigeStrom(true);
       anzeige.setContrast(kontrast());
       // Frage sofort zeigen (nicht erst nach dem Loslassen).
       // bestaetigen() wertet die noch gehaltene Taste 1 nicht als "nein".
@@ -2292,7 +2322,7 @@ bool einschaltAbfrage() {
 void lademodus() {
   tonAus();
   verstaerkerAus();
-  anzeige.setPowerSave(0);
+  anzeigeStrom(true);
   anzeige.setContrast(kontrast());
   unsigned long hellAb = millis();
   unsigned long t2Seit = 0;
@@ -2329,7 +2359,7 @@ void lademodus() {
     if (taste1()) {
       if (einschaltAbfrage()) return;
       verstaerkerAus();
-      anzeige.setPowerSave(0);
+      anzeigeStrom(true);
     }
     if (!dunkel && millis() - hellAb > 30000) { anzeige.setContrast(min((uint8_t)10, kontrast())); dunkel = true; }
     int versatz = (int)((millis() / 60000) % 5) - 2;   // jede Minute etwas verschieben
@@ -3182,8 +3212,27 @@ void setup() {
 
   Serial.begin(115200);
   Wire.begin();
+  platine = platineErkennen();
+  if (platine) {                     // Platine v5: 13 V an, Display-Reset (>10 us), loslassen
+    pinMode(PIN_BOOST_EIN, OUTPUT);
+    pinMode(PIN_OLED_RES, OUTPUT);
+    digitalWrite(PIN_OLED_RES, LOW);
+    digitalWrite(PIN_BOOST_EIN, HIGH);
+    delay(10);
+    digitalWrite(PIN_OLED_RES, HIGH);
+    delay(5);
+  }
   anzeige.setI2CAddress(0x3C * 2);   // neues Display: Adresse fest auf 0x3C
-  anzeige.begin();                   // Bus-Takt laesst U8g2 selbst (200 kHz)
+  if (platine) {                     // Displayglas: erst einstellen, dann einschalten
+    anzeige.initDisplay();
+    anzeige.sendF("ca", 0xAD, 0x80); // interne Ladepumpe aus (13 V kommen vom Wandler)
+    anzeige.sendF("ca", 0xD5, 0x80); // Takt und Vorladezeit laut Datenblatt GME128128-02
+    anzeige.sendF("ca", 0xD9, 0x1D);
+    anzeige.clearDisplay();
+    anzeige.setPowerSave(0);
+  } else {
+    anzeige.begin();                 // Bus-Takt laesst U8g2 selbst (200 kHz)
+  }
   anzeige.setContrast(HELL);         // sonst bleibt der dunkle Startwert (0x2F) stehen
                                      // (nach dem Laden der Einstellungen gilt HELLIGKEIT)
 
@@ -3202,14 +3251,14 @@ void setup() {
   if (nachUpdate) InternalFS.remove("/nachupdate");
 
   if (!usbSteckt() && !nachUpdate) {
-    anzeige.setPowerSave(1);
+    anzeigeStrom(false);
     if (!einschaltAbfrage()) tiefschlaf();
   } else if (readResetReason() & POWER_RESETREAS_VBUS_Msk) {
     // war aus und wurde durch Einstecken des Kabels geweckt -> nur laden
     lademodus();
   }
 
-  anzeige.setPowerSave(0);
+  anzeigeStrom(true);
   if (nachUpdate) {                    // kurz bestaetigen, dass das Update geklappt hat
     meldung("Update", "fertig!", "Version", FW_VERSION);
     kurzerPiep(1500, 80); delay(60); kurzerPiep(2000, 120);
@@ -3281,10 +3330,10 @@ void displaySparen() {
   bool aus = DISPLAY_AUS_MIN > 0 && !imFlug && !frageAktiv() && !suchenLaeuft() && !usbSteckt() &&
              !(warnBis && (long)(millis() - warnBis) < 0) &&
              millis() - letzteTaste > (unsigned long)DISPLAY_AUS_MIN * 60000UL;
-  if (aus && !displayAus) { anzeige.setPowerSave(1); displayAus = true; }
+  if (aus && !displayAus) { anzeigeStrom(false); displayAus = true; }
   else if (!aus && displayAus) {
     displayAus = false;
-    anzeige.setPowerSave(0);
+    anzeigeStrom(true);
     anzeige.setContrast(kontrast());
     naechsteZeile = 99;                          // gleich neues Bild
   }

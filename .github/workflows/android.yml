@@ -18,6 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: App-Nummer (zaehlt nur Aenderungen an der App)
+        run: |
+          N=$(git rev-list --count HEAD -- index.html android-app manifest.webmanifest icon-192.png icon-512.png)
+          echo "APP_NR=$N" >> $GITHUB_ENV
+          echo "::notice::App-Nummer $N"
 
       - uses: actions/setup-java@v4
         with:
@@ -68,7 +76,7 @@ jobs:
 
       - name: APK umbenennen
         run: |
-          NAME=sweef_app_v1_0_${{ github.run_number }}.apk
+          NAME=sweef_app_v1_0_${APP_NR}.apk
           cp android-app/$APK $NAME
           echo "::notice::$NAME ($(du -h $NAME | cut -f1)) gebaut"
 

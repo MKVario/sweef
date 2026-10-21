@@ -3,8 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Versionsnummer kommt beim Bauen auf GitHub aus der Laufnummer
-val laufNr = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
+// Versionsnummer: Anzahl der Aenderungen an der App (beim Bauen auf GitHub gesetzt).
+// So gibt es nur dann eine neue App-Version, wenn sich an der App etwas aendert.
+val laufNr = (System.getenv("APP_NR") ?: System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
 
 android {
     namespace = "de.sweef.vario"

@@ -36,15 +36,17 @@ jobs:
         run: |
           ls -la dateien
           echo "VERSION=$(cat dateien/version.txt)" >> $GITHUB_ENV
+          A=$(ls dateien/sweef_app_v1_0_*.apk | sed 's/.*_v1_0_\([0-9]*\)\.apk/\1/')
+          echo "APPNR=$A" >> $GITHUB_ENV
 
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.VERSION }}-app${{ github.run_number }}
+          tag_name: v${{ env.VERSION }}-app${{ env.APPNR }}
           target_commitish: ${{ github.sha }}
-          name: Sweef-App 1.0.${{ github.run_number }} · Firmware ${{ env.VERSION }}
+          name: Sweef-App 1.0.${{ env.APPNR }} · Firmware ${{ env.VERSION }}
           make_latest: true
           body: |
-            **App:** sweef_app_v1_0_${{ github.run_number }}.apk aufs Handy laden und installieren (installiert sich über die alte Version).
+            **App:** sweef_app_v1_0_${{ env.APPNR }}.apk aufs Handy laden und installieren (installiert sich über die alte Version).
             **Firmware:** wird von der App per Bluetooth aufgespielt (Gerät → Firmware-Update).
             Für USB: sweef_firmware_gross.hex / sweef_firmware_klein.hex
           files: |

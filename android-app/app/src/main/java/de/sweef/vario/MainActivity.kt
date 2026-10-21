@@ -206,6 +206,7 @@ class MainActivity : Activity() {
         @JavascriptInterface fun tempoAn(): Boolean = VarioService.tempoAn(this@MainActivity)
         @JavascriptInterface fun tempoSetzen(an: Boolean) = VarioService.tempoSetzen(this@MainActivity, an)
         @JavascriptInterface fun tempo(): Float = VarioService.letztesTempo
+        @JavascriptInterface fun wind(): String = Wind.text()
         @JavascriptInterface fun gpsErlaubt(): Boolean = darf(Manifest.permission.ACCESS_FINE_LOCATION)
 
         @JavascriptInterface fun appVersion(): String =

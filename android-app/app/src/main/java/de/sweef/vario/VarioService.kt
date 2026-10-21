@@ -54,6 +54,20 @@ class VarioService : Service() {
     }
 
     private var lm: LocationManager? = null
+    private var windGesendet = 0L
+    private var sonneVerbindung = -1
+    private var sonneZeit = 0L
+
+    /** Sonnenuntergang an diesem Ort ans Vario: einmal je Verbindung und alle 30 Minuten */
+    private fun sonneSenden(lat: Double, lon: Double) {
+        val jetzt = System.currentTimeMillis()
+        if (VarioBle.verbindungNr == sonneVerbindung && jetzt - sonneZeit < 30 * 60_000L) return
+        val su = Wind.naechsterSonnenuntergang(lat, lon)
+        if (su <= 0) return
+        sonneVerbindung = VarioBle.verbindungNr
+        sonneZeit = jetzt
+        VarioBle.kurzSenden("su=$su")
+    }
     private var wach: PowerManager.WakeLock? = null
 
     private val gps = object : LocationListener {
@@ -65,10 +79,18 @@ class VarioService : Service() {
             }
             if (alt <= 3 && (!l.hasAccuracy() || l.accuracy < 50))
                 GpsSpur.punkt(l.time, l.latitude, l.longitude, if (l.hasAltitude()) l.altitude else -9999.0)
+            if (alt <= 3 && VarioBle.bereit) sonneSenden(l.latitude, l.longitude)
             if (!l.hasSpeed() || alt > 3) { letztesTempo = -1f; return }
             val kmh = l.speed * 3.6f
             letztesTempo = kmh
             if (tempoAn(this@VarioService)) VarioBle.tempoSenden(kmh)
+            // Wind schaetzen (nur im Flug) und alle 10 s ans Vario
+            if (l.hasBearing()) Wind.punkt(System.currentTimeMillis(), kmh.toDouble(), l.bearing.toDouble(), Startplaetze.fliegt)
+            val jetzt = System.currentTimeMillis()
+            if (Wind.gueltig() && jetzt - windGesendet >= 10_000) {
+                windGesendet = jetzt
+                VarioBle.kurzSenden("wi=${Wind.kmh},${Wind.aus}")
+            }
         }
         @Deprecated("alt") override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
         override fun onProviderEnabled(p: String) {}

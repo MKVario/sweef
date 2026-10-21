@@ -419,7 +419,15 @@
     if (box && gs) {
       const t = N.tempo(), an = N.tempoAn();
       box.hidden = !an;
-      gs.textContent = t < 0 ? "–" : Math.round(t) + " km/h";
+      let txt = t < 0 ? "–" : Math.round(t) + " km/h";
+      try {
+        const w = N.wind && N.wind() ? JSON.parse(N.wind()) : null;
+        if (w) {
+          const R = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
+          txt += w.kmh < 3 ? " · Wind still" : ` · Wind ${R[Math.round(w.aus / 45) % 8]} ${w.kmh}`;
+        }
+      } catch (e) {}
+      gs.textContent = txt;
     }
   }
 

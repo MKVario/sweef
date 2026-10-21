@@ -371,6 +371,15 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
         <p class="leer" id="listeLeer">Noch keine Flüge gespeichert. Nach dem ersten Flug: verbinden und „Neue Flüge laden“ tippen.</p>
       </section>
 
+      <section id="steigBox" hidden>
+        <h2>Steigkarte</h2>
+        <p class="hint">Wo im Fluggebiet es trägt – aus allen Flügen mit Flugweg zusammengerechnet. Je mehr Flüge, desto genauer.</p>
+        <select id="skGebiet" aria-label="Fluggebiet" style="width:100%;margin:0 0 10px"></select>
+        <canvas class="karte" id="steigKarte" style="height:340px" role="img" aria-label="Karte: Steigen und Sinken im Fluggebiet"></canvas>
+        <p class="note" id="skInfo"></p>
+        <p class="note">Grün: Steigen (kräftiger = stärker) · Rot: Sinken über 1 m/s · Kästchen ca. 30 × 30 m · Karte © OpenStreetMap-Mitwirkende</p>
+      </section>
+
       <section>
         <h2>Sichern</h2>
         <p class="hint">Flüge, Startplätze und Profile liegen im Speicher auf dem Handy. Wenn die Website-Daten gelöscht werden, sind sie weg. Mach deshalb ab und zu eine Sicherung.</p>
@@ -513,6 +522,11 @@ const FELDER = [
   ["fd","flug","… mindestens so lange","s",2,60,1,"range","Verhindert Fehlstarts durch Böen."],
   ["lr","flug","Landung nach Ruhe von","s",20,900,10,"range","So lange ruhig auf gleicher Höhe = gelandet."],
   ["ao","flug","Automatisch ausschalten nach","min",0,240,5,"range","Wenn das Vario am Boden so lange nicht bewegt wird. Vorher warnt es 30 Sekunden lang. 0 = nie."],
+  ["gv","flug","Gegenwind-Warnung unter","km/h",0,20,1,"range","Nur mit der Android-App (GPS vom Handy). Fällt im Flug die Geschwindigkeit über Grund 3 Sekunden lang darunter, spielt das Vario alle 4 Sekunden drei fallende Töne – auch wenn es stumm ist – und zeigt „Gegenwind!“. 0 = aus. Braucht Vario-Programm ab 2.10.27."],
+  ["sh","flug","Sonnenuntergang-Hinweis","min vorher",0,120,5,"range","Das Handy schickt beim Verbinden die Uhrzeit des Sonnenuntergangs an deinem Ort. Das Vario zeigt so viele Minuten vorher und beim Untergang einen Hinweis mit zwei hellen Tönen. 0 = aus. Ab 2.10.27."],
+  ["wa","anzeige","Wind anzeigen","",0,1,1,"switch","Die Android-App schätzt im Flug den Wind aus dem GPS, sobald du ein paar Kurven oder Wenden geflogen bist. Das Vario zeigt ihn dann an, z. B. „SW 25“ = Wind aus Südwest mit 25 km/h. Ab 2.10.27."],
+  ["rz","anzeige","Restlaufzeit statt Akku-Prozent","",0,1,1,"switch","Unten im Display steht die geschätzte Restlaufzeit (z. B. 9:30h), sobald das Vario 20 Minuten ohne Kabel gelaufen ist. Vorher die Prozent. Ab 2.10.27."],
+  ["dt","ton","Doppeltippen = stumm / Ton an","",0,1,1,"switch","Zweimal kurz und kräftig aufs Gehäuse tippen: am Boden stumm bzw. Ton wieder an. Im Flug schaltet Doppeltippen nur den Ton an, nie stumm. Ab 2.10.27."],
 ];
 const TESTS = [0.3, 0.8, 1.5, 3, 5, -3];
 
@@ -720,6 +734,34 @@ function liveZeigen(text) {
   }
   if (d.fl !== "1" && d.gb === "1") $("lfl").textContent = "am Boden · stumm";
 }
+// Sonnenuntergang (Unix-Sekunden) fuer Ort und Tag, -1 = keiner (Polarnacht/-tag)
+function sonnenuntergang(lat, lon, ms) {
+  const r = Math.PI / 180, sin = x => Math.sin(x * r), cos = x => Math.cos(x * r);
+  const n = Math.ceil(ms / 86400000 + 2440587.5 - 2451545.0 + 0.0008);
+  const js = n - lon / 360;
+  const m = (357.5291 + 0.98560028 * js) % 360;
+  const c = 1.9148 * sin(m) + 0.02 * sin(2 * m) + 0.0003 * sin(3 * m);
+  const l = (m + c + 180 + 102.9372) % 360;
+  const jt = 2451545.0 + js + 0.0053 * sin(m) - 0.0069 * sin(2 * l);
+  const d = Math.asin(sin(l) * sin(23.4397)) / r;
+  const x = (sin(-0.833) - sin(lat) * sin(d)) / (cos(lat) * cos(d));
+  if (x < -1 || x > 1) return -1;
+  return Math.round(((jt + Math.acos(x) / r / 360) - 2440587.5) * 86400);
+}
+function naechsterSonnenuntergang(lat, lon) {
+  const jetzt = Date.now();
+  let su = sonnenuntergang(lat, lon, jetzt);
+  if (su > 0 && su * 1000 < jetzt - 3600000) su = sonnenuntergang(lat, lon, jetzt + 86400000);
+  return su;
+}
+function sonneSenden() {
+  if (window.SweefNative || !navigator.geolocation) return;     // Android-App schickt selbst
+  navigator.geolocation.getCurrentPosition(p => {
+    const su = naechsterSonnenuntergang(p.coords.latitude, p.coords.longitude);
+    if (su > 0 && befehlKanal) senden("su=" + su);
+  }, () => {}, { maximumAge: 3600000, timeout: 20000 });
+}
+
 function senden(text, meldung) {
   if (!befehlKanal) { melden("Erst verbinden"); return Promise.resolve(); }
   warteschlange = warteschlange
@@ -1256,6 +1298,118 @@ async function listeZeigen() {
     li.querySelector("button").onclick = () => detailZeigen(f);
     ul.appendChild(li);
   });
+  try { steigkarteVorbereiten(); } catch (e) {}
+}
+
+// ---- Steigkarte: Steigen je Ort aus allen Flügen mit Flugweg ----
+function abstandKm(a, b, c, d) {
+  const r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r;
+  return 6371 * Math.sqrt(x * x + y * y);
+}
+let skGebiete = [];
+function steigkarteVorbereiten() {
+  const N = window.SweefNative;
+  skGebiete = [];
+  alleFluege.forEach(f => {
+    if (!f.spur && N) { const sp = spurHolen(f); if (sp) { f.spur = sp; dbSchreiben(f).catch(() => {}); } }
+    if (!f.spur) return;
+    const p = f.spur[0];
+    let g = skGebiete.find(x => abstandKm(x.lat, x.lon, p[1], p[2]) < 3);
+    if (!g) { g = { lat: p[1], lon: p[2], fluege: [] }; skGebiete.push(g); }
+    g.fluege.push(f);
+  });
+  $("steigBox").hidden = skGebiete.length === 0;
+  if (!skGebiete.length) return;
+  const sps = Array.isArray(startplaetze) ? startplaetze : [];
+  skGebiete.sort((a, b) => b.fluege.length - a.fluege.length);
+  const sel = $("skGebiet"), alt = sel.value;
+  sel.innerHTML = "";
+  skGebiete.forEach((g, i) => {
+    const sp = sps.filter(s => s.lat != null && s.lon != null).map(s => [s, abstandKm(g.lat, g.lon, s.lat, s.lon)])
+      .sort((a, b) => a[1] - b[1])[0];
+    const name = sp && sp[1] < 3 ? sp[0].name : `bei ${Math.abs(g.lat).toFixed(2)}°${g.lat < 0 ? "S" : "N"} ${Math.abs(g.lon).toFixed(2)}°${g.lon < 0 ? "W" : "O"}`;
+    const o = document.createElement("option");
+    o.value = i; o.textContent = `${name} · ${g.fluege.length} ${g.fluege.length === 1 ? "Flug" : "Flüge"}`;
+    sel.appendChild(o);
+  });
+  if (alt && +alt < skGebiete.length) sel.value = alt;
+  steigkarteZeichnen();
+}
+$("skGebiet").onchange = steigkarteZeichnen;
+function steigkarteZeichnen() {
+  const g = skGebiete[+$("skGebiet").value || 0];
+  if (!g) return;
+  const ZELLE = 30;                                   // m
+  const lat0 = g.lat, mx = 111320 * Math.cos(lat0 * Math.PI / 180), my = 110540;
+  const zellen = new Map();
+  g.fluege.forEach(f => f.spur.forEach(p => {
+    const sek = p[0];
+    if (sek < 5) return;
+    const v = (f.hoehe[sek] - f.hoehe[sek - 5]) / 5;
+    const k = Math.floor(p[2] * mx / ZELLE) + "," + Math.floor(p[1] * my / ZELLE);
+    const z = zellen.get(k) || { s: 0, n: 0 };
+    z.s += v; z.n++; zellen.set(k, z);
+  }));
+  const liste = [];
+  zellen.forEach((z, k) => {
+    if (z.n < 3) return;
+    const [ix, iy] = k.split(",").map(Number);
+    liste.push({ lon1: ix * ZELLE / mx, lon2: (ix + 1) * ZELLE / mx, lat1: iy * ZELLE / my, lat2: (iy + 1) * ZELLE / my, v: z.s / z.n });
+  });
+  const best = liste.slice().sort((a, b) => b.v - a.v)[0];
+  $("skInfo").textContent = liste.length
+    ? `${g.fluege.length} ${g.fluege.length === 1 ? "Flug" : "Flüge"} · ${liste.length} Kästchen · bestes Mittel +${zahl(best.v, 0.1)} m/s`
+    : "Noch zu wenig Daten in diesem Gebiet.";
+  const punkte = [];
+  g.fluege.forEach(f => f.spur.forEach(p => punkte.push([p[1], p[2]])));
+  osmKarte($("steigKarte"), punkte, (gr, proj) => {
+    const gruen = farbe("--steigen"), rot = farbe("--sinken");
+    liste.forEach(c => {
+      if (c.v > -1 && c.v < 0.2) return;
+      const a = proj(c.lat2, c.lon1), b = proj(c.lat1, c.lon2);
+      gr.globalAlpha = c.v >= 0.2 ? Math.min(0.9, 0.35 + c.v / 2.5) : Math.min(0.8, 0.3 + (-c.v - 1) / 3);
+      gr.fillStyle = c.v >= 0.2 ? gruen : rot;
+      gr.fillRect(a[0], a[1], Math.max(2, b[0] - a[0]), Math.max(2, b[1] - a[1]));
+    });
+    gr.globalAlpha = 1;
+  });
+}
+// OSM-Karte, die alle Punkte [lat, lon] zeigt; malen(g, proj) zeichnet darauf
+function osmKarte(c, punkte, malen) {
+  const dpr = window.devicePixelRatio || 1, B = c.clientWidth, H = c.clientHeight;
+  if (!B || !punkte.length) return;
+  c.width = B * dpr; c.height = H * dpr;
+  const g = c.getContext("2d"); g.scale(dpr, dpr);
+  const welt = (lat, lon) => {
+    const r = lat * Math.PI / 180;
+    return [(lon + 180) / 360 * 256, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * 256];
+  };
+  const p0 = punkte.map(p => welt(p[0], p[1]));
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  p0.forEach(p => { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); });
+  const rand = 20;
+  const zf = Math.log2(Math.min((B - 2 * rand) / Math.max(maxX - minX, 1e-9), (H - 2 * rand) / Math.max(maxY - minY, 1e-9)));
+  const z = Math.max(3, Math.min(17, Math.floor(zf)));
+  const k = Math.max(1, Math.min(2, Math.pow(2, zf - z)));
+  const s = Math.pow(2, z) * k, T = 256 * k;
+  const ox = (minX + maxX) / 2 * s - B / 2, oy = (minY + maxY) / 2 * s - H / 2;
+  const proj = (lat, lon) => { const w = welt(lat, lon); return [w[0] * s - ox, w[1] * s - oy]; };
+  const zeichnen = () => {
+    g.fillStyle = farbe("--chip"); g.fillRect(0, 0, B, H);
+    for (let tx = Math.floor(ox / T); tx <= Math.floor((ox + B) / T); tx++)
+      for (let ty = Math.floor(oy / T); ty <= Math.floor((oy + H) / T); ty++) {
+        const kk = `${z}/${tx}/${ty}`;
+        let img = kacheln[kk];
+        if (!img) {
+          img = kacheln[kk] = new Image();
+          img.onload = () => { if (c.isConnected) zeichnen(); };
+          img.src = `https://tile.openstreetmap.org/${kk}.png`;
+        }
+        if (img.complete && img.naturalWidth) g.drawImage(img, tx * T - ox, ty * T - oy, T + 0.5, T + 0.5);
+      }
+    malen(g, proj);
+  };
+  zeichnen();
 }
 
 // ---- Details mit Kurve ----
@@ -1731,6 +1885,7 @@ async function einrichten() {
     $("vario").hidden = true; $("sicherheit").hidden = true;
   }
   senden("zeit=" + Math.floor(Date.now() / 1000));       // Uhrzeit ans Vario
+  sonneSenden();
   verbZeigen(true);
   if (info && info.pin === "1" && info.ok !== "1") {      // PIN noetig
     const k = schluesselLesen();

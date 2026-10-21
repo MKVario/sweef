@@ -62,12 +62,21 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.26"
+#define FW_VERSION "2.10.27"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
 volatile unsigned long gsZeit = 0;
 bool gsDa() { return gsZeit != 0 && millis() - gsZeit < 5000 && gsKmh >= 0; }
+// Wind, vom Handy geschaetzt ("wi=25,230": km/h, kommt aus Grad)
+volatile int windKmh = -1, windAus = 0;
+volatile unsigned long windZeit = 0;
+bool windDa() { return windZeit != 0 && millis() - windZeit < 90000UL && windKmh >= 0; }
+// Sonnenuntergang (Unix-Zeit) vom Handy ("su=1767288000")
+volatile uint32_t sonneUnter = 0;
+bool gegenwindAktiv = false;           // Gegenwind-Warnung laeuft
+unsigned long gegenwindSeit = 0;
+int  restMin = -1;                     // geschaetzte Restlaufzeit in Minuten (-1 = noch unbekannt)
 
 // ---------- Einstellungen (hier kannst du Werte aendern) ----------
 float STEIG_EIN    = 0.10;  // m/s, ab hier piept es
@@ -92,6 +101,11 @@ bool  DISPLAY_DREHEN = false;
 int   HELLIGKEIT     = 100;  // Display-Helligkeit in % (per Handy einstellbar)
 bool  G_AUTO         = true;   // in Spiralen G-Last statt Hoehe anzeigen
 float G_WARNUNG      = 0;      // g, ab hier Warnton (0 = aus)
+int   GEGENWIND_AB   = 5;      // km/h ueber Grund im Flug: darunter Gegenwind-Warnung (0 = aus)
+bool  WIND_ANZEIGEN  = true;   // geschaetzten Wind am Display zeigen
+bool  RESTZEIT       = true;   // Restlaufzeit statt Prozent (sobald genug gemessen)
+int   SONNE_VORHER   = 30;     // Minuten vor Sonnenuntergang Hinweis (0 = aus)
+bool  DOPPELTIPP     = false;  // zweimal aufs Gehaeuse tippen = stumm / Ton an
 
 // Auto-Aus: nach so vielen Minuten ohne Bewegung am Boden ausschalten (0 = nie)
 int   AUTO_AUS_MIN       = 30;
@@ -267,10 +281,11 @@ void vollSichern() {
 
 bool laedt() { return digitalRead(PIN_LADEN) == LOW; }
 
-// Ruhespannung -> Prozent (typische LiPo-Kurve)
+// Spannung -> Prozent. Gemessen am Sweef (Akkutest 19./20.10.2026, ca. 14 mA):
+// Prozent = Anteil der restlichen Laufzeit bis zur Abschaltung bei 3,40 V.
 int prozentAusSpannung(float v) {
-  const float V[] = {3.30, 3.61, 3.69, 3.71, 3.73, 3.75, 3.77, 3.79, 3.80, 3.82, 3.84,
-                     3.85, 3.87, 3.91, 3.95, 3.98, 4.02, 4.08, 4.11, 4.15, 4.20};
+  const float V[] = {3.400, 3.435, 3.472, 3.505, 3.530, 3.549, 3.565, 3.580, 3.593, 3.611, 3.630,
+                     3.663, 3.704, 3.750, 3.799, 3.849, 3.902, 3.956, 4.014, 4.076, 4.150};
   if (v <= V[0])  return 0;
   if (v >= V[20]) return 100;
   int i = 0;
@@ -1074,6 +1089,18 @@ void tonAktualisieren() {
     return;
   }
 
+  // Gegenwind: alle 4 s drei fallende Toene (auch wenn stumm), dazwischen normaler Vario-Ton
+  if (gegenwindAktiv) {
+    unsigned long t = (jetzt - gegenwindSeit) % 4000;
+    if (t < 600) {
+      int f = (t < 170) ? 1100 : (t >= 200 && t < 370) ? 850 : (t >= 400 && t < 570) ? 620 : 0;
+      if (f) tonKennung(f, max(lautStufe, 3), -f);
+      else   tonAus();
+      phase = RUHE;
+      return;
+    }
+  }
+
   float v = vJetzt();                      // echter Wert oder Testwert
   if (lautStufe == 0 || !gestartet || (bodenStumm() && !testLaeuft())) {
     tonAus();
@@ -1183,6 +1210,14 @@ void lautAendern(int richtung) {
 // =================================================================
 // Anzeige
 // =================================================================
+// Wind als Text: "SW 25" (kommt aus Suedwest, 25 km/h); lang: "Wind SW 25"
+void windText(char* t, int laenge, bool lang) {
+  static const char* R[8] = {"N", "NO", "O", "SO", "S", "SW", "W", "NW"};
+  int i = ((windAus % 360 + 360 + 22) % 360) / 45;
+  if (windKmh < 3) snprintf(t, laenge, lang ? "Wind still" : "still");
+  else snprintf(t, laenge, lang ? "Wind %s %d" : "%s %d", R[i], windKmh);
+}
+
 void zahlMitVorzeichen(char* text, int laenge, float wert) {
   int zehntel = (int)round(wert * 10);
   char vz = (zehntel > 0) ? '+' : (zehntel < 0 ? '-' : ' ');
@@ -1191,7 +1226,8 @@ void zahlMitVorzeichen(char* text, int laenge, float wert) {
 }
 
 unsigned long warnBis = 0;     // Akkuwarnung anzeigen bis
-char warnText[12] = "";
+char warnText[16] = "";
+char warnTitel[12] = "Akku";
 
 #if DISPLAY_KLEIN
 // ---------- Anzeige 64 x 128 (altes 0,96" OLED 128x64, SSD1306, hochkant) ----------
@@ -1347,7 +1383,8 @@ void bildZeichnen() {
 
   // Hoehe ueber Meer, Maximum, Flugzeit (klein)
   anzeige.setFont(u8g2_font_6x10_tf);
-  if (gsDa()) snprintf(text, sizeof(text), "GS %d km/h", (int)lroundf(gsKmh));
+  if (WIND_ANZEIGEN && windDa() && (millis() / 3000) % 2) windText(text, sizeof(text), true);
+  else if (gsDa()) snprintf(text, sizeof(text), "GS %d km/h", (int)lroundf(gsKmh));
   else        snprintf(text, sizeof(text), "NN  %d m", (int)round(hoeheNN()));
   anzeige.drawStr(2, 89, text);
 
@@ -1375,9 +1412,13 @@ void bildZeichnen() {
   if (Bluefruit.connected()) anzeige.drawStr(51, 127, "BT");
 
   // Hinweise ueber allem: Akkuwarnung, Vario suchen
-  if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox("Akku", warnText);
+  if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox(warnTitel, warnText);
   else warnBis = 0;
   if (suchenLaeuft() && (millis() / 300) % 2) hinweisBox("Hier!", "Taste=aus");
+  if (gegenwindAktiv && (millis() / 700) % 2) {
+    snprintf(text, sizeof(text), "%d km/h", (int)lroundf(gsKmh));
+    hinweisBox("Gegenwind!", text);
+  }
   if (frageAktiv()) frageBox();
 }
 
@@ -1783,7 +1824,18 @@ void bildZeichnen() {
     snprintf(text, sizeof(text), "Gmax %d.%d", gm / 10, gm % 10);
   } else if (flugGewesen) snprintf(text, sizeof(text), "Max %d", (int)round(maxHoehe));
   else             snprintf(text, sizeof(text), "Max --");
-  anzeige.drawStr(126 - anzeige.getStrWidth(text), 101, text);
+  int maxX = 126 - anzeige.getStrWidth(text);
+  anzeige.drawStr(maxX, 101, text);
+  if (WIND_ANZEIGEN && windDa()) {           // Wind in der Mitte, wenn Platz ist
+    char nn[12];
+    snprintf(nn, sizeof(nn), "NN %d", (int)round(hoeheNN()));
+    int nnEnde = 2 + anzeige.getStrWidth(nn);
+    windText(text, sizeof(text), false);
+    int bw = anzeige.getStrWidth(text);
+    int x = (BR - bw) / 2;
+    if (x < nnEnde + 4) x = nnEnde + 4;
+    if (x + bw < maxX - 3) anzeige.drawStr(x, 101, text);
+  }
 
   if (flugGewesen) {
     unsigned long min = flugDauerMs / 60000UL;
@@ -1807,15 +1859,23 @@ void bildZeichnen() {
   else                    lautSymbol();
   akkuSymbol(52, 120);
   if (!akkuFehlt()) {
-    snprintf(text, sizeof(text), "%d%%", akkuProzent());
+    if (RESTZEIT && restMin >= 0) {
+      int st = restMin / 60;
+      if (st >= 10) snprintf(text, sizeof(text), "%dh", st);
+      else          snprintf(text, sizeof(text), "%d:%02dh", st, restMin % 60);
+    } else snprintf(text, sizeof(text), "%d%%", akkuProzent());
     anzeige.drawStr(72, 127, text);
   }
   if (Bluefruit.connected()) anzeige.drawStr(112, 127, "BT");
 
   // Hinweise ueber allem: Akkuwarnung, Vario suchen
-  if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox("Akku", warnText);
+  if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox(warnTitel, warnText);
   else warnBis = 0;
   if (suchenLaeuft() && (millis() / 300) % 2) hinweisBox("Hier!", "Taste = aus");
+  if (gegenwindAktiv && (millis() / 700) % 2) {
+    snprintf(text, sizeof(text), "%d km/h", (int)lroundf(gsKmh));
+    hinweisBox("Gegenwind!", text);
+  }
   if (frageAktiv()) frageBox();
 }
 
@@ -2281,6 +2341,11 @@ Einstellung EINST[] = {
   {"la", 'i', &LIVE_MS,            100,  2000},   // Live-Werte ans Handy alle ... ms
   {"za", 'i', &ZAHL_MS,            100,  2000},   // Steigwert-Zahl am Display: Mittel ueber ... ms
   {"ds", 'i', &DISPLAY_AUS_MIN,      0,    60},   // Display am Boden aus nach ... min (0 = nie)
+  {"gv", 'i', &GEGENWIND_AB,         0,    30},   // Gegenwind-Warnung unter ... km/h (0 = aus)
+  {"wa", 'b', &WIND_ANZEIGEN,        0,     1},   // Wind am Display
+  {"rz", 'b', &RESTZEIT,             0,     1},   // Restlaufzeit statt Prozent
+  {"sh", 'i', &SONNE_VORHER,         0,   120},   // Sonnenuntergang-Hinweis ... min vorher (0 = aus)
+  {"dt", 'b', &DOPPELTIPP,           0,     1},   // Doppeltippen = stumm / Ton an
 };
 const int ANZ_EINST = sizeof(EINST) / sizeof(EINST[0]);
 float standardWerte[ANZ_EINST];    // Grundeinstellung (fuer "reset")
@@ -2326,7 +2391,7 @@ int einstText(char* buf, int groesse) {
 unsigned long einstSpeichernUm = 0;
 
 void einstSpeichern() {
-  char buf[240];
+  char buf[300];
   int n = einstText(buf, sizeof(buf));
   InternalFS.remove("/einst");
   Adafruit_LittleFS_Namespace::File f(InternalFS);
@@ -2338,7 +2403,7 @@ void einstSpeichern() {
 }
 
 void einstAnHandy() {             // Einstellungs-Kanal aktualisieren
-  char buf[240];
+  char buf[300];
   int n = gesperrt() ? snprintf(buf, sizeof(buf), "lock=1") : einstText(buf, sizeof(buf));
   chrEinst.write(buf, n);
   if (Bluefruit.connected()) chrEinst.notify(buf, n);
@@ -2466,6 +2531,24 @@ void befehlEmpfangen(uint16_t verbindung, BLECharacteristic* chr, uint8_t* daten
     gsKmh = atof(t);
     gsZeit = millis();
     if (gsZeit == 0) gsZeit = 1;
+    return;
+  }
+  if (laenge > 3 && laenge < 20 && memcmp(daten, "wi=", 3) == 0) {   // Wind: "wi=25,230"
+    char t[20];
+    memcpy(t, daten + 3, laenge - 3);
+    t[laenge - 3] = 0;
+    char* k = strchr(t, ',');
+    windKmh = atoi(t);
+    windAus = k ? atoi(k + 1) : 0;
+    windZeit = millis();
+    if (windZeit == 0) windZeit = 1;
+    return;
+  }
+  if (laenge > 3 && laenge < 20 && memcmp(daten, "su=", 3) == 0) {   // Sonnenuntergang (Unix)
+    char t[20];
+    memcpy(t, daten + 3, laenge - 3);
+    t[laenge - 3] = 0;
+    sonneUnter = strtoul(t, NULL, 10);
     return;
   }
   if (befehlDa) return;                       // vorheriger noch nicht fertig
@@ -2642,7 +2725,7 @@ void bluetoothStarten() {
 
   chrEinst.setProperties(CHR_PROPS_READ | CHR_PROPS_NOTIFY);
   chrEinst.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
-  chrEinst.setMaxLen(240);
+  chrEinst.setMaxLen(300);
   chrEinst.begin();
 
   chrBefehl.setProperties(CHR_PROPS_WRITE | CHR_PROPS_WRITE_WO_RESP);
@@ -2842,6 +2925,7 @@ void autoAusPruefen() {
 // Akkuwarnung: bei 10 % und 5 % (dann alle 5 Minuten), leer am Boden: aus
 // =================================================================
 void warnung(const char* text) {
+  strncpy(warnTitel, "Akku", sizeof(warnTitel) - 1);
   strncpy(warnText, text, sizeof(warnText) - 1);
   warnBis = millis() + 5000;
   if (warnBis == 0) warnBis = 1;
@@ -3063,6 +3147,11 @@ void setup() {
 // =================================================================
 // Hauptschleife
 // =================================================================
+void gegenwindPruefen();
+void sonnePruefen();
+void doppeltippPruefen();
+void restzeitMessen();
+
 void loop() {
   messen();
   tonAktualisieren();
@@ -3076,6 +3165,10 @@ void loop() {
   autoAusPruefen();
   akkuAktualisieren();
   akkuWarnen();
+  gegenwindPruefen();
+  sonnePruefen();
+  doppeltippPruefen();
+  restzeitMessen();
   if (speichernUm && (long)(millis() - speichernUm) >= 0) lautSpeichern();
   if (updateModusAb && (long)(millis() - updateModusAb) >= 0) updateModusStarten();
   if (frageBis && (!frageAktiv() || imFlug)) { frageBis = 0; antwort("S,2"); }   // keine Antwort / gestartet
@@ -3114,4 +3207,124 @@ void updateModusStarten() {
   textSpeichern("/nachupdate", "1");   // nach dem Update gleich eingeschaltet starten
   delay(300);
   enterOTADfu();                 // startet den Bootloader im Bluetooth-Update-Modus
+}
+
+// =================================================================
+// Gegenwind: im Flug mit Handy-GPS. Faellt das Tempo ueber Grund 3 s lang
+// unter GEGENWIND_AB, warnt das Vario (Ton + Anzeige), bis es wieder
+// 3 s lang mindestens 3 km/h darueber liegt.
+// =================================================================
+void gegenwindPruefen() {
+  static unsigned long langsamSeit = 0, schnellSeit = 0;
+  if (GEGENWIND_AB <= 0 || !imFlug || !gsDa()) {
+    gegenwindAktiv = false;
+    langsamSeit = schnellSeit = 0;
+    return;
+  }
+  unsigned long jetzt = millis();
+  if (gsKmh < GEGENWIND_AB) {
+    schnellSeit = 0;
+    if (!langsamSeit) langsamSeit = jetzt | 1;
+    if (!gegenwindAktiv && jetzt - langsamSeit > 3000) {
+      gegenwindAktiv = true;
+      gegenwindSeit = jetzt;
+    }
+  } else if (gsKmh > GEGENWIND_AB + 3) {
+    langsamSeit = 0;
+    if (!schnellSeit) schnellSeit = jetzt | 1;
+    if (gegenwindAktiv && jetzt - schnellSeit > 3000) gegenwindAktiv = false;
+  }
+}
+
+// Hinweis-Kasten fuer 8 s mit zwei hellen Toenen
+void hinweisZeigen(const char* titel, const char* text) {
+  strncpy(warnTitel, titel, sizeof(warnTitel) - 1);
+  warnTitel[sizeof(warnTitel) - 1] = 0;
+  strncpy(warnText, text, sizeof(warnText) - 1);
+  warnText[sizeof(warnText) - 1] = 0;
+  warnBis = millis() + 8000;
+  if (warnBis == 0) warnBis = 1;
+  kurzerPiep(1500, 120); delay(80); kurzerPiep(1900, 160);
+}
+
+// Sonnenuntergang: Hinweis SONNE_VORHER Minuten vorher und beim Untergang
+void sonnePruefen() {
+  static unsigned long letzte = 0;
+  static uint32_t fuer = 0;
+  static uint8_t stufe = 0;
+  if (millis() - letzte < 5000) return;
+  letzte = millis();
+  if (SONNE_VORHER <= 0 || sonneUnter == 0) return;
+  uint32_t jetzt = jetztUnix();
+  if (jetzt == 0) return;
+  long rest = (long)sonneUnter - (long)jetzt;
+  if (fuer != sonneUnter) {                 // neuer Wert vom Handy
+    fuer = sonneUnter;
+    stufe = (rest <= 0) ? 2 : 0;
+  }
+  if (stufe == 0 && rest > 0 && rest <= SONNE_VORHER * 60L) {
+    stufe = 1;
+    char t[16];
+    snprintf(t, sizeof(t), "in %ld min", (rest + 59) / 60);
+    hinweisZeigen("Sunset", t);
+  } else if (stufe == 1 && rest <= 0) {
+    stufe = 2;
+    hinweisZeigen("Sunset", "jetzt");
+  }
+}
+
+// Doppeltippen aufs Gehaeuse (Tipp-Erkennung im Bewegungssensor):
+// am Boden stumm <-> Ton an; im Flug nur Ton an (nie aus Versehen stumm).
+void tippEinrichten() {
+  imu.writeRegister(0x58, DOPPELTIPP ? 0x8F : 0x00);   // TAP_CFG: x/y/z, gelatcht
+  imu.writeRegister(0x59, 0x08);                       // Schwelle 8 x 0,25 g = 2 g (bei +-8 g)
+  imu.writeRegister(0x5A, 0x25);                       // max. 0,6 s zwischen den Tipps, kurz und ruhig
+  imu.writeRegister(0x5B, DOPPELTIPP ? 0x80 : 0x00);   // Doppeltipp an
+}
+
+void doppeltippPruefen() {
+  static unsigned long letzte = 0, eingerichtetFuer = 0;
+  static bool warAn = false;
+  static int vorher = LAUT_START;
+  if (!imuOk) return;
+  if (eingerichtetFuer != imuStartMs || warAn != DOPPELTIPP) {
+    tippEinrichten();
+    eingerichtetFuer = imuStartMs;
+    warAn = DOPPELTIPP;
+  }
+  if (!DOPPELTIPP || millis() - letzte < 40) return;
+  letzte = millis();
+  uint8_t quelle = 0;
+  imu.readRegister(&quelle, 0x1C);                     // TAP_SRC (Lesen loescht)
+  if (!(quelle & 0x10)) return;                        // kein Doppeltipp
+  letzteTaste = millis();
+  aktivJetzt();
+  if (lautStufe > 0) {
+    if (imFlug) return;                                // im Flug nie stumm schalten
+    vorher = lautStufe;
+    lautStufe = 0;
+    aktFreq = 0;
+    kurzerPiep(600, 80);
+  } else {
+    lautStufe = (vorher > 0) ? vorher : LAUT_START;
+    aktFreq = 0;
+    kurzerPiep(1200, 80);
+  }
+  speichernUm = millis() + 3000;
+  if (speichernUm == 0) speichernUm = 1;
+}
+
+// Restlaufzeit: aus dem Abfall der Prozent seit dem Abziehen (mind. 20 min, 2 %)
+void restzeitMessen() {
+  static unsigned long letzte = 0, t0 = 0;
+  static int p0 = -1;
+  if (millis() - letzte < 10000) return;
+  letzte = millis();
+  if (usbSteckt() || akkuFehlt()) { p0 = -1; restMin = -1; return; }
+  int p = akkuProzent();
+  if (p0 < 0 || p > p0 + 2) { p0 = p; t0 = millis(); restMin = -1; return; }
+  unsigned long dt = millis() - t0;
+  if (dt < 20UL * 60000UL || p0 - p < 2) return;
+  float proMin = (p0 - p) / (dt / 60000.0f);
+  restMin = (int)(p / proMin);
 }

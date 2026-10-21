@@ -370,6 +370,15 @@ object VarioBle {
         }
     }
 
+    /** kurze Nachricht ohne Antwort (Wind, Sonnenuntergang) */
+    fun kurzSenden(text: String) {
+        handler.post {
+            if (!bereit || schlange.size > 5) return@post
+            schlange.addLast(Op(0, BEFEHL, text.toByteArray(), false) { _, _, _ -> })
+            naechste()
+        }
+    }
+
     fun tempoSenden(kmh: Float) {
         handler.post {
             if (!bereit || schlange.size > 3) return@post

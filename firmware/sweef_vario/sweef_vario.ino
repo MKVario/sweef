@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.31"
+#define FW_VERSION "2.10.32"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -645,6 +645,9 @@ const SPIFlash_Device_t FLASH_P25Q16H = {
 };
 bool flashOk = false;
 uint8_t flashKennung[3] = {0, 0, 0};   // nur bei Fehler gelesen (soll 85 60 15)
+uint8_t spiKennung[3]   = {0, 0, 0};   // Diagnose: per Hand (ohne QSPI) gelesen
+uint8_t qDiag[3]        = {0, 0, 0};   // Diagnose: QSPI an, Befehl ok, Lesen ok
+bool    flashGerettet   = false;       // erst nach Speicher-Reset per Hand erkannt
 
 struct FlugInfo { uint32_t adr, nr, zeit, boot, up, anzahl; int16_t nn; uint16_t vor; };
 const int MAX_FLUEGE = 300;
@@ -745,6 +748,41 @@ void qspiAus() {
   *(volatile uint32_t*)0x40029FFCul = 1;
 }
 
+// Diagnose/Rettung: Speicher-Chip ohne QSPI-Baustein "per Hand" ansprechen
+// (SPI, Pins D24 SCK, D25 CS, D26 DI, D27 DO, D28 WP, D29 HOLD)
+uint8_t handByte(uint8_t aus) {
+  uint8_t ein = 0;
+  for (int i = 7; i >= 0; i--) {
+    digitalWrite(26, (aus >> i) & 1);
+    delayMicroseconds(2);
+    digitalWrite(24, HIGH);
+    delayMicroseconds(2);
+    ein = (ein << 1) | (digitalRead(27) ? 1 : 0);
+    digitalWrite(24, LOW);
+  }
+  return ein;
+}
+void handBefehl(uint8_t b) {
+  digitalWrite(25, LOW); handByte(b); digitalWrite(25, HIGH); delayMicroseconds(50);
+}
+void speicherPerHand() {
+  pinMode(25, OUTPUT); digitalWrite(25, HIGH);
+  pinMode(24, OUTPUT); digitalWrite(24, LOW);
+  pinMode(26, OUTPUT); pinMode(27, INPUT);
+  pinMode(28, OUTPUT); digitalWrite(28, HIGH);
+  pinMode(29, OUTPUT); digitalWrite(29, HIGH);
+  delay(1);
+  for (int i = 0; i < 2; i++) handBefehl(0xFF);   // Dauer-Lesemodus beenden
+  handBefehl(0x66); handBefehl(0x99);             // Reset
+  delay(2);
+  handBefehl(0xAB);                               // aufwecken
+  delay(2);
+  digitalWrite(25, LOW);
+  handByte(0x9F);
+  for (int i = 0; i < 3; i++) spiKennung[i] = handByte(0);
+  digitalWrite(25, HIGH);
+}
+
 void flugspeicherStarten() {
   // Einschalt-Zaehler
   Adafruit_LittleFS_Namespace::File f(InternalFS);
@@ -768,9 +806,20 @@ void flugspeicherStarten() {
     delay(2);
     flashOk = flash.begin(&FLASH_P25Q16H, 1);
   }
-  if (!flashOk) {                                    // Kennung fuer die Fehlersuche
-    flashTransport.readCommand(0x9F, flashKennung, 3);
-    return;
+  if (!flashOk) {                                    // Diagnose + Rettungsversuch
+    qspiAus();
+    flashTransport.begin();
+    delay(2);
+    qDiag[0] = NRF_QSPI->ENABLE ? 1 : 0;
+    qDiag[1] = flashTransport.runCommand(0xAB) ? 1 : 0;
+    delay(2);
+    qDiag[2] = flashTransport.readCommand(0x9F, flashKennung, 3) ? 1 : 0;
+    qspiAus();
+    speicherPerHand();                               // Chip direkt ansprechen + Reset
+    qspiAus();
+    flashOk = flash.begin(&FLASH_P25Q16H, 1);        // und noch einmal ueber QSPI
+    if (!flashOk) return;
+    flashGerettet = true;
   }
   flugspeicherVorbereiten();
   flugspeicherEinlesen();
@@ -1568,7 +1617,7 @@ void selbsttest() {
   for (int i = 0; i < 3; i++) {
     int y = 32 + i * 13;
     anzeige.drawStr(2, y, t[i].name);
-    const char* e = t[i].ok ? "OK" : "FEHLT";
+    const char* e = t[i].ok ? ((i == 2 && flashGerettet) ? "OK*" : "OK") : "FEHLT";
     anzeige.drawStr(62 - anzeige.getStrWidth(e), y, e);
     if (!t[i].ok) fehler = true;
   }
@@ -1581,9 +1630,10 @@ void selbsttest() {
   if (fehler) {
     anzeige.drawStr(2, 98, "Fehler!");
     if (!flashOk) {
-      char k[12];
-      snprintf(k, sizeof(k), "%02X %02X %02X", flashKennung[0], flashKennung[1], flashKennung[2]);
-      anzeige.drawStr(2, 112, "Daten-ID");
+      char k[20];
+      snprintf(k, sizeof(k), "Q%02X%02X%02X %d%d%d", flashKennung[0], flashKennung[1], flashKennung[2], qDiag[0], qDiag[1], qDiag[2]);
+      anzeige.drawStr(2, 112, k);
+      snprintf(k, sizeof(k), "S%02X%02X%02X", spiKennung[0], spiKennung[1], spiKennung[2]);
       anzeige.drawStr(2, 124, k);
     } else {
       anzeige.drawStr(2, 112, "Bitte");
@@ -2043,7 +2093,7 @@ void selbsttest() {
   for (int i = 0; i < 3; i++) {
     int y = 36 + i * 16;
     anzeige.drawStr(6, y, t[i].name);
-    const char* e = t[i].ok ? "OK" : "FEHLT";
+    const char* e = t[i].ok ? ((i == 2 && flashGerettet) ? "OK*" : "OK") : "FEHLT";
     anzeige.drawStr(122 - anzeige.getStrWidth(e), y, e);
     if (!t[i].ok) fehler = true;
   }
@@ -2055,11 +2105,13 @@ void selbsttest() {
   anzeige.drawHLine(0, 92, BR);
   if (fehler) {
     if (!flashOk) {                        // Kennung des Datenspeichers zeigen
-      char k[24];
-      snprintf(k, sizeof(k), "Daten-ID %02X %02X %02X", flashKennung[0], flashKennung[1], flashKennung[2]);
-      anzeige.drawStr(textMitte("Fehler!"), 108, "Fehler!");
+      char k[28];
+      anzeige.drawStr(textMitte("Fehler!"), 106, "Fehler!");
       anzeige.setFont(u8g2_font_6x12_tf);
-      anzeige.drawStr(textMitte(k), 124, k);
+      snprintf(k, sizeof(k), "Q %02X %02X %02X E%dW%dR%d", flashKennung[0], flashKennung[1], flashKennung[2], qDiag[0], qDiag[1], qDiag[2]);
+      anzeige.drawStr(textMitte(k), 116, k);
+      snprintf(k, sizeof(k), "SPI %02X %02X %02X", spiKennung[0], spiKennung[1], spiKennung[2]);
+      anzeige.drawStr(textMitte(k), 127, k);
     } else {
       anzeige.drawUTF8(textMitte("Fehler! Bitte prüfen"), 114, "Fehler! Bitte prüfen");
     }

@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.29"
+#define FW_VERSION "2.10.30"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -2187,15 +2187,24 @@ void tiefschlaf() {
   systemOff(PIN_TASTE1, LOW);
 }
 
+void selbsttest();
 void neustart() {
   tonAus();
   meldung("Neustart", "", "Ruhig", "halten...");
   flugBeendenWennNoetig();
-  if (imuOk) imuOk = imuStarten();
+  // alle Teile neu pruefen (auch die, die beim Einschalten gefehlt haben)
+  sensorOk = dps.begin_I2C(0x77, &Wire);
+  if (sensorOk) {
+    dps.configurePressure(DPS310_32HZ, DPS310_8SAMPLES);
+    dps.configureTemperature(DPS310_2HZ, DPS310_1SAMPLE);
+  }
+  imuOk = imuStarten();
+  if (!flashOk) flugspeicherStarten();
   nullDruck = 0;
   gestartet = false;
   flugReset();
   kalmanReset();
+  selbsttest();
   kurzerPiep(1000, 120);
   delay(80);
   kurzerPiep(1500, 120);

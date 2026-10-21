@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.27"
+#define FW_VERSION "2.10.28"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -737,8 +737,11 @@ void flugspeicherStarten() {
   InternalFS.remove("/boot");
   if (f.open("/boot", FILE_O_WRITE)) { f.write((uint8_t*)&bootNr, 4); f.close(); }
 
-  // bis zu 3 Versuche: wecken, Speicher-Reset, erkennen
-  for (int versuch = 0; versuch < 3 && !flashOk; versuch++) {
+  // bis zu 6 Versuche: wecken, Speicher-Reset, erkennen (mit Pausen,
+  // damit sich der Speicher nach einem Spannungs-Wackler fangen kann)
+  delay(10);
+  for (int versuch = 0; versuch < 6 && !flashOk; versuch++) {
+    if (versuch > 0) delay(20 * versuch);
     flashTransport.begin();
     flashTransport.runCommand(0xAB);                 // aus dem Tiefschlaf wecken
     delay(2);
@@ -2255,9 +2258,17 @@ void lademodus() {
 }
 
 // "Aus" mit USB-Kabel: Lademodus. Der Controller bleibt wach,
-// damit das Hochladen weiter funktioniert.
+// damit das Hochladen weiter funktioniert. Bluetooth geht aus
+// (sonst findet das Handy ein Vario, das "aus" ist).
+extern uint16_t verbHandle;
 void ausMitUsb() {
   tonAus();
+  Bluefruit.Advertising.restartOnDisconnect(false);
+  Bluefruit.Advertising.stop();
+  if (Bluefruit.connected() && verbHandle != BLE_CONN_HANDLE_INVALID) {
+    Bluefruit.disconnect(verbHandle);
+    delay(200);
+  }
   flugBeendenWennNoetig();
   if (speichernUm) lautSpeichern();
   einstSichern();

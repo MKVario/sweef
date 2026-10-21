@@ -169,6 +169,7 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C anzeige(U8G2_R1, U8X8_PIN_NONE);   // altes 
 #else
 U8G2_SH1107_SEEED_128X128_F_HW_I2C anzeige(U8G2_R0, U8X8_PIN_NONE);   // 1,5" OLED 128x128
 
+#endif
 // ---- Eigene Platine v5 (wird am INA226 auf 0x40 erkannt) ----
 // Dort haengt das nackte Displayglas: 13-V-Wandler an D7 (BOOST_EIN, mit
 // Pulldown) und Display-Reset an D6 (OLED_RES, mit Pulldown). Ohne die
@@ -198,7 +199,6 @@ void anzeigeStrom(bool an) {
     if (platine) digitalWrite(PIN_BOOST_EIN, LOW);
   }
 }
-#endif
 LSM6DS3 imu(I2C_MODE, 0x6A);
 
 // ---------- Zustand ----------

@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.28"
+#define FW_VERSION "2.10.29"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -729,6 +729,20 @@ void flugspeicherVorbereiten() {
   if (f.open("/logok", FILE_O_WRITE)) { f.write((uint8_t)1); f.close(); }
 }
 
+// QSPI-Schnittstelle ganz abschalten (auch wenn sie vom Bootloader oder
+// vor einem Neustart noch an ist). Erst dann lassen sich die Pins neu
+// zuweisen und der Treiber neu starten. Mit Nordic-Errata-122-Umgehung.
+void qspiAus() {
+  flashTransport.end();                              // Treiber freigeben (falls an)
+  if (NRF_QSPI->ENABLE) {
+    NRF_QSPI->TASKS_DEACTIVATE = 1;
+    *(volatile uint32_t*)0x40029010ul = 1;
+    *(volatile uint32_t*)0x40029054ul = 1;
+    delay(1);
+    NRF_QSPI->ENABLE = 0;
+  }
+}
+
 void flugspeicherStarten() {
   // Einschalt-Zaehler
   Adafruit_LittleFS_Namespace::File f(InternalFS);
@@ -742,7 +756,9 @@ void flugspeicherStarten() {
   delay(10);
   for (int versuch = 0; versuch < 6 && !flashOk; versuch++) {
     if (versuch > 0) delay(20 * versuch);
+    qspiAus();                                       // jedes Mal frisch starten
     flashTransport.begin();
+    flashTransport.runCommand(0xFF);                 // evtl. Dauer-Lesemodus beenden
     flashTransport.runCommand(0xAB);                 // aus dem Tiefschlaf wecken
     delay(2);
     flashTransport.runCommand(0x66);                 // Reset freigeben
@@ -2276,6 +2292,7 @@ void ausMitUsb() {
   // Einschalten aus dem Lademodus: richtig neu starten, damit wie beim
   // Einschalten mit Akku Startbild und Selbsttest kommen.
   vollSichern();
+  qspiAus();                       // Speicher-Schnittstelle sauber aus vor dem Neustart
   delay(50);
   NVIC_SystemReset();
 }

@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.34"
+#define FW_VERSION "2.10.35"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -106,6 +106,7 @@ bool  WIND_ANZEIGEN  = true;   // geschaetzten Wind am Display zeigen
 bool  RESTZEIT       = true;   // Restlaufzeit statt Prozent (sobald genug gemessen)
 int   SONNE_VORHER   = 30;     // Minuten vor Sonnenuntergang Hinweis (0 = aus)
 bool  DOPPELTIPP     = false;  // zweimal aufs Gehaeuse tippen = stumm / Ton an
+int   AKKU_MAH       = 500;    // Akkugroesse in mAh (fuer Ladeanzeige und Tabelle)
 
 // Auto-Aus: nach so vielen Minuten ohne Bewegung am Boden ausschalten (0 = nie)
 int   AUTO_AUS_MIN       = 30;
@@ -311,11 +312,15 @@ void vollSichern() {
 
 bool laedt() { return digitalRead(PIN_LADEN) == LOW; }
 
-// Spannung -> Prozent. Gemessen am Sweef (Akkutest 19./20.10.2026, ca. 14 mA):
-// Prozent = Anteil der restlichen Laufzeit bis zur Abschaltung bei 3,40 V.
+// Spannung -> Prozent = Anteil der restlichen Laufzeit bis zur Abschaltung bei 3,40 V.
+// Zwei gemessene Akkus (die Kurven unterscheiden sich deutlich):
+// 300 mAh (602030, mobiles Vario, 19./20.10.2026) und 500 mAh (503035, Testbrett, 22./23.10.2026).
+const float V300[] = {3.400, 3.435, 3.472, 3.505, 3.530, 3.549, 3.565, 3.580, 3.593, 3.611, 3.630,
+                      3.663, 3.704, 3.750, 3.799, 3.849, 3.902, 3.956, 4.014, 4.076, 4.150};
+const float V500[] = {3.400, 3.480, 3.518, 3.573, 3.636, 3.705, 3.752, 3.779, 3.797, 3.817, 3.832,
+                      3.853, 3.892, 3.935, 3.967, 3.980, 3.988, 3.996, 4.010, 4.046, 4.123};
 int prozentAusSpannung(float v) {
-  const float V[] = {3.400, 3.435, 3.472, 3.505, 3.530, 3.549, 3.565, 3.580, 3.593, 3.611, 3.630,
-                     3.663, 3.704, 3.750, 3.799, 3.849, 3.902, 3.956, 4.014, 4.076, 4.150};
+  const float* V = (AKKU_MAH < 400) ? V300 : V500;
   if (v <= V[0])  return 0;
   if (v >= V[20]) return 100;
   int i = 0;
@@ -356,14 +361,30 @@ void akkuAktualisieren() {
   if (usb && laedt()) { vollAusgleich = 0; vollNachlauf = 0; }   // neu am Laden
 }
 
+// Beim Laden zaehlt die Zeit: der XIAO laedt mit 100 mA, also steigt der Akku um
+// 100 mA / Akkugroesse pro Stunde (500 mAh: 20 %/h). Start ist der letzte Wert
+// vor dem Einstecken. Die Spannung ist beim Laden zu hoch, um daraus zu rechnen.
+int letzteEntladeP = -1;
+unsigned long ladeStartMs = 0;
+int ladeStartP = 0;
+bool warLaden = false;
+
 int akkuProzent() {
   if (akkuVoll) return 100;
   if (usbSteckt() && laedt()) {
-    // beim Laden ist die Spannung etwas hoeher als in Ruhe
-    int p = min(99, prozentAusSpannung(akkuV - 0.05));
+    if (!warLaden) {
+      warLaden = true;
+      ladeStartMs = millis();
+      ladeStartP = (letzteEntladeP >= 0) ? letzteEntladeP : prozentAusSpannung(akkuV - 0.12);
+    }
+    float stunden = (millis() - ladeStartMs) / 3600000.0f;
+    int p = ladeStartP + (int)(stunden * 100.0f * 100.0f / max(100, AKKU_MAH));
+    if (akkuV >= 4.13f && p < 90) p = 90;       // Konstantspannung: fast voll
+    p = constrain(p, 1, 99);
     if (p > ladeMax) ladeMax = p;
     return ladeMax;
   }
+  warLaden = false;
   int p = prozentAusSpannung(akkuV);
   if (vollAusgleich > 0 && !usbSteckt()) {
     if (p <= 70 || vollStart <= 70) { vollAusgleich = 0; return p; }
@@ -372,6 +393,7 @@ int akkuProzent() {
     if (anteil > 1) anteil = 1;
     p = min(100, p + (int)(vollAusgleich * anteil + 0.5f));
   }
+  if (!usbSteckt()) letzteEntladeP = p;
   return p;
 }
 
@@ -2471,6 +2493,7 @@ Einstellung EINST[] = {
   {"rz", 'b', &RESTZEIT,             0,     1},   // Restlaufzeit statt Prozent
   {"sh", 'i', &SONNE_VORHER,         0,   120},   // Sonnenuntergang-Hinweis ... min vorher (0 = aus)
   {"dt", 'b', &DOPPELTIPP,           0,     1},   // Doppeltippen = stumm / Ton an
+  {"ka", 'i', &AKKU_MAH,           100,  2000},   // Akkugroesse (mAh)
 };
 const int ANZ_EINST = sizeof(EINST) / sizeof(EINST[0]);
 float standardWerte[ANZ_EINST];    // Grundeinstellung (fuer "reset")

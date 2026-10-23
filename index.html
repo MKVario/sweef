@@ -526,6 +526,7 @@ const FELDER = [
   ["sh","flug","Sonnenuntergang-Hinweis","min vorher",0,120,5,"range","Das Handy schickt beim Verbinden die Uhrzeit des Sonnenuntergangs an deinem Ort. Das Vario zeigt so viele Minuten vorher und beim Untergang einen Hinweis mit zwei hellen Tönen. 0 = aus. Ab 2.10.27."],
   ["wa","anzeige","Wind anzeigen","",0,1,1,"switch","Die Android-App schätzt im Flug den Wind aus dem GPS, sobald du ein paar Kurven oder Wenden geflogen bist. Das Vario zeigt ihn dann an, z. B. „SW 25“ = Wind aus Südwest mit 25 km/h. Ab 2.10.27."],
   ["rz","anzeige","Restlaufzeit statt Akku-Prozent","",0,1,1,"switch","Unten im Display steht die geschätzte Restlaufzeit (z. B. 9:30h), sobald das Vario 20 Minuten ohne Kabel gelaufen ist. Vorher die Prozent. Ab 2.10.27."],
+  ["ka","anzeige","Akkugröße","mAh",100,1000,50,"range","Für die Akkuanzeige beim Laden und die passende Spannungstabelle. 300 = kleiner Akku (602030), 500 = großer Akku (503035). Ab 2.10.35."],
   ["dt","ton","Doppeltippen = stumm / Ton an","",0,1,1,"switch","Zweimal kurz und kräftig aufs Gehäuse tippen: am Boden stumm bzw. Ton wieder an. Im Flug schaltet Doppeltippen nur den Ton an, nie stumm. Ab 2.10.27."],
 ];
 const TESTS = [0.3, 0.8, 1.5, 3, 5, -3];
@@ -1974,11 +1975,18 @@ function alZeigen() {
   $("alStart").className = akkuLog.an ? "danger" : "primary";
   const w = [];
   if (n) {
-    const erst = e[0], letzt = e[n - 1], dauer = letzt.t - erst.t;
-    w.push(["Läuft seit", hm(dauer), ""]);
+    const letzt = e[n - 1];
+    // Verbrauch und Rest erst ab dem letzten Abziehen des Ladekabels rechnen
+    let ab = 0;
+    for (let i = n - 1; i >= 0; i--) if (e[i].us) { ab = i + 1; break; }
+    const laedt = !!letzt.us;
+    const erst = e[Math.min(ab, n - 1)], dauer = letzt.t - erst.t;
+    let ladeAb = 0;                                   // Beginn des laufenden Ladens
+    if (laedt) for (let i = n - 1; i >= 0; i--) if (!e[i].us) { ladeAb = i + 1; break; }
+    w.push([laedt ? "Lädt seit" : "Läuft seit", hm(laedt ? letzt.t - e[ladeAb].t : dauer), ""]);
     w.push(["Akku", letzt.p + " %", ""]);
     w.push(["Spannung", letzt.v != null ? zahl(letzt.v, 0.01) + " V" : "–", ""]);
-    const verbrauch = dauer > 15 * 60000 ? (erst.p - letzt.p) / (dauer / 3600000) : null;
+    const verbrauch = !laedt && dauer > 15 * 60000 ? (erst.p - letzt.p) / (dauer / 3600000) : null;
     w.push(["Verbrauch", verbrauch != null && verbrauch > 0 ? zahl(verbrauch, 0.1) + " %/h" : "–", ""]);
     w.push(["Rest (geschätzt)", verbrauch > 0 ? hm(letzt.p / verbrauch * 3600000) : "–", ""]);
     w.push(["Messpunkte", String(n), ""]);

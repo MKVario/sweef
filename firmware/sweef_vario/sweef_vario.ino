@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.35"
+#define FW_VERSION "2.10.36"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -466,6 +466,9 @@ void pinLoeschen() {
 // Sekunden den echten Steigwert bei Ton und Anzeige
 float testSteigen = 0;
 unsigned long testBis = 0;
+// Belastungstest: volle Helligkeit, laut, Steigen laeuft 0,2 -> 5 -> 0,2 m/s (60 s)
+int  belastungStufe = 0;               // 0 = aus, sonst Lautstaerkestufe
+int  belastungAltLaut = 0, belastungAltHell = 100;
 
 // =================================================================
 // Lage-Berechnung (Mahony-Filter)
@@ -1531,7 +1534,8 @@ void bildZeichnen() {
   if (imFlug && (millis() / 500) % 2) anzeige.drawDisc(60, 109, 2);   // blinkt im Flug
 
   // Statuszeile: Lautstaerke, Akku, Bluetooth
-  if (lautStufe == 0)     anzeige.drawStr(2, 127, "stumm");
+  if (belastungStufe)     anzeige.drawStr(2, 127, "TEST");
+  else if (lautStufe == 0) anzeige.drawStr(2, 127, "stumm");
   else if (bodenStumm())  anzeige.drawStr(2, 127, "Boden");
   else                    lautSymbol();
   akkuSymbol(35, 121);
@@ -1981,7 +1985,8 @@ void bildZeichnen() {
   anzeige.drawHLine(0, 117, BR);
 
   // Statuszeile: Lautstaerke, Akku, Bluetooth
-  if (lautStufe == 0)     anzeige.drawStr(2, 127, "stumm");
+  if (belastungStufe)     anzeige.drawStr(2, 127, "TEST");
+  else if (lautStufe == 0) anzeige.drawStr(2, 127, "stumm");
   else if (bodenStumm())  anzeige.drawStr(2, 127, "Boden");   // Ton erst nach Start
   else                    lautSymbol();
   akkuSymbol(52, 120);
@@ -2559,6 +2564,7 @@ void einstAnHandy() {             // Einstellungs-Kanal aktualisieren
 
 // Fuehrt Befehle aus: "se=0.2;f1=800" / "test=2.5" / "ls=3" / "reset" / "null"
 // mitWirkung=false: nur Werte setzen (beim Laden aus dem Speicher)
+void belastungSetzen(int stufe);
 void befehlAusfuehren(char* text, bool mitWirkung) {
   bool geaendert = false;
   char* rest = text;
@@ -2622,6 +2628,10 @@ void befehlAusfuehren(char* text, bool mitWirkung) {
         sendeArt = (sendeIdx >= 0) ? 2 : 0;
         if (sendeIdx < 0) { char t[24]; int n = snprintf(t, sizeof(t), "E,%lu,0", (unsigned long)nr); chrDaten.notify(t, n); }
       }
+      continue;
+    }
+    if (strcmp(name, "last") == 0) {          // Belastungstest: last=5 (Stufe) / last=0 (aus)
+      if (mitWirkung) belastungSetzen(constrain((int)wert, 0, LAUT_STUFEN));
       continue;
     }
     if (strcmp(name, "test") == 0) {          // Ton testen fuer 4 Sekunden
@@ -3315,6 +3325,7 @@ void setup() {
 // Hauptschleife
 // =================================================================
 void gegenwindPruefen();
+void belastungArbeiten();
 void sonnePruefen();
 void doppeltippPruefen();
 void restzeitMessen();
@@ -3333,6 +3344,7 @@ void loop() {
   akkuAktualisieren();
   akkuWarnen();
   gegenwindPruefen();
+  belastungArbeiten();
   sonnePruefen();
   doppeltippPruefen();
   restzeitMessen();
@@ -3350,7 +3362,7 @@ int anzeigeTakt() { return imFlug ? ANZEIGE_MS : 100; }   // am Boden 10 Bilder 
 // Display am Boden nach DISPLAY_AUS_MIN Minuten ohne Tastendruck aus; im Flug,
 // bei Warnungen, Fragen oder Suche immer an.
 void displaySparen() {
-  bool aus = DISPLAY_AUS_MIN > 0 && !imFlug && !frageAktiv() && !suchenLaeuft() && !usbSteckt() &&
+  bool aus = DISPLAY_AUS_MIN > 0 && !imFlug && !belastungStufe && !frageAktiv() && !suchenLaeuft() && !usbSteckt() &&
              !(warnBis && (long)(millis() - warnBis) < 0) &&
              millis() - letzteTaste > (unsigned long)DISPLAY_AUS_MIN * 60000UL;
   if (aus && !displayAus) { anzeigeStrom(false); displayAus = true; }
@@ -3494,4 +3506,39 @@ void restzeitMessen() {
   if (dt < 20UL * 60000UL || p0 - p < 2) return;
   float proMin = (p0 - p) / (dt / 60000.0f);
   restMin = (int)(p / proMin);
+}
+
+// =================================================================
+// Belastungstest (vom Handy: "last=5" an, "last=0" aus). Einstellungen werden
+// nicht gespeichert; nach dem Stoppen oder einem Neustart ist alles wie vorher.
+// =================================================================
+void belastungSetzen(int stufe) {
+  if (stufe > 0 && !belastungStufe) {         // einschalten
+    belastungAltLaut = lautStufe;
+    belastungAltHell = HELLIGKEIT;
+  }
+  if (stufe > 0) {
+    belastungStufe = stufe;
+    lautStufe = stufe;
+    HELLIGKEIT = 100;
+    anzeige.setContrast(kontrast());
+  } else if (belastungStufe) {                // ausschalten
+    belastungStufe = 0;
+    lautStufe = belastungAltLaut;
+    HELLIGKEIT = belastungAltHell;
+    anzeige.setContrast(kontrast());
+    testBis = 0;
+    tonAus();
+  }
+  aktFreq = 0;
+}
+
+void belastungArbeiten() {
+  if (!belastungStufe) return;
+  unsigned long t = millis() % 60000UL;        // 30 s hoch, 30 s runter
+  float anteil = (t < 30000UL) ? t / 30000.0f : (60000UL - t) / 30000.0f;
+  testSteigen = 0.2f + 4.8f * anteil;
+  testBis = millis() + 1000;
+  if (testBis == 0) testBis = 1;
+  aktivJetzt();                                 // kein Auto-Aus
 }

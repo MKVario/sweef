@@ -432,6 +432,15 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
         <button id="suchenAus">Stopp</button>
       </div>
     </section>
+    <section class="braucht-vario">
+      <h2>Belastungstest</h2>
+      <p class="hint">Für Akkutests im ungünstigsten Fall: volle Helligkeit, lauter Ton, das Steigen läuft dauernd von 0,2 bis 5 m/s und zurück. Deine Einstellungen bleiben erhalten – nach „Stopp“ oder einem Neustart ist alles wie vorher. Für lange Tests Stufe 5 nehmen, das schont den Lautsprecher. Braucht Vario-Programm ab 2.10.36.</p>
+      <div class="knopfreihe">
+        <select id="lastStufe" aria-label="Lautstärke beim Belastungstest"><option value="5" selected>Stufe 5</option><option value="6">Stufe 6 (max)</option><option value="3">Stufe 3</option></select>
+        <button class="primary" id="lastStart">Starten</button>
+        <button id="lastStopp">Stopp</button>
+      </div>
+    </section>
     <section class="braucht-vario" id="vario">
       <h2>Name und Begrüßung</h2>
       <div class="feld">
@@ -670,6 +679,8 @@ $("pinSetzen").onclick = () => {
 $("pinAus").onclick = () => senden("pin_neu=");
 $("suchen").onclick = () => senden("suchen", "Vario piept …");
 $("suchenAus").onclick = () => senden("suchen_aus", "Ton aus");
+$("lastStart").onclick = () => senden("last=" + $("lastStufe").value, "Belastungstest läuft");
+$("lastStopp").onclick = () => senden("last=0", "Belastungstest beendet");
 
 function infoZeigen(text) {
   const d = zerlegen(text);

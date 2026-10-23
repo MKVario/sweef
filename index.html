@@ -443,6 +443,7 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
     </section>
     <section class="braucht-vario" id="vario">
       <h2>Name und Begrüßung</h2>
+      <p class="note" id="trennInfo" hidden></p>
       <div class="feld">
         <label for="nameZusatz">Name des Varios</label>
         <div class="namenreihe"><span>Sweef-</span><input id="nameZusatz" maxlength="12" autocapitalize="off" spellcheck="false" placeholder="ID"></div>
@@ -682,8 +683,20 @@ $("suchenAus").onclick = () => senden("suchen_aus", "Ton aus");
 $("lastStart").onclick = () => senden("last=" + $("lastStufe").value, "Belastungstest läuft");
 $("lastStopp").onclick = () => senden("last=0", "Belastungstest beendet");
 
+const TRENN_GRUND = { 8: "Verbindung verloren (Funk-Zeitüberschreitung)", 19: "Handy/PC hat getrennt", 22: "Vario hat getrennt",
+  34: "Funk-Zeitüberschreitung (Protokoll)", 61: "Prüfsummenfehler", 62: "Verbindungsaufbau fehlgeschlagen" };
+function trennungZeigen(tr) {
+  const el = $("trennInfo");
+  if (!el) return;
+  if (!tr) { el.hidden = true; return; }
+  const [g, s, n] = tr.split(",").map(Number);
+  const vor = s < 120 ? `${s} s` : s < 7200 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1).replace(".", ",")} h`;
+  el.textContent = `Letzte Trennung vor ${vor}: ${TRENN_GRUND[g] || "Code " + g} · ${n}× seit dem Einschalten`;
+  el.hidden = false;
+}
 function infoZeigen(text) {
   const d = zerlegen(text);
+  trennungZeigen(d.tr);
   varioInfoDaten = Object.assign(varioInfoDaten, d);
   if (document.activeElement !== $("nameZusatz")) $("nameZusatz").value = d.zs || "";
   $("nameZusatz").placeholder = d.id || "ID";
@@ -1921,12 +1934,13 @@ function getrennt() {
   wiederverbinden();
 }
 
-// Verbindung abgerissen (zu weit weg, Vario aus): 2 Minuten lang neu versuchen
+// Verbindung abgerissen (zu weit weg, Vario aus): 2 Minuten lang neu versuchen,
+// waehrend einer Akku-Aufzeichnung immer weiter (alle 10 s)
 async function wiederverbinden() {
-  for (let versuch = 1; versuch <= 40; versuch++) {
+  for (let versuch = 1; versuch <= 40 || (akkuLog && akkuLog.an); versuch++) {
     if (absichtlichGetrennt || !geraet) return;
     $("status").textContent = `Verbindung verloren – verbinde neu (${versuch}) …`;
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, versuch <= 40 ? 3000 : 10000));
     if (absichtlichGetrennt || geraet.gatt.connected) return;
     try { await einrichten(); return; } catch (e) {}
   }

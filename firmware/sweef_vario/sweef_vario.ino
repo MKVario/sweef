@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.36"
+#define FW_VERSION "2.10.37"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -2717,12 +2717,16 @@ void befehlEmpfangen(uint16_t verbindung, BLECharacteristic* chr, uint8_t* daten
 }
 
 // ---- Info-Kanal: "id=A3F2;nm=Sweef-A3F2;zs=;pin=1;ok=0;fw=2.10;gt=..." ----
+extern volatile uint8_t trennGrund; extern volatile uint32_t trennZeitMs; extern volatile uint16_t trennAnzahl;
 void infoAnHandy() {
   char buf[200], name[24];
   geraeteName(name, sizeof(name));
   int n = snprintf(buf, sizeof(buf), "id=%s;nm=%s;zs=%s;pin=%d;ok=%d;fw=" FW_VERSION ";dv=%c",
                    geraeteId, name, nameZusatz, pinAktiv() ? 1 : 0, gesperrt() ? 0 : 1, DISPLAY_KLEIN ? 'k' : 'g');
   if (!gesperrt()) n += snprintf(buf + n, sizeof(buf) - n, ";gt=%s", gruss);
+  if (trennAnzahl)                      // letzte Trennung: Grund, vor wie vielen s, Anzahl seit Start
+    n += snprintf(buf + n, sizeof(buf) - n, ";tr=%u,%lu,%u", trennGrund,
+                  (unsigned long)((millis() - trennZeitMs) / 1000), trennAnzahl);
   chrInfo.write(buf, n);
   if (Bluefruit.connected()) chrInfo.notify(buf, n);
 }
@@ -2869,7 +2873,16 @@ void verbindungsTakt(int einheiten) {           // Einheiten zu 1,25 ms
   BLEConnection* c = Bluefruit.Connection(verbHandle);
   if (c && c->requestConnectionParameter(einheiten)) verbTakt = einheiten;
 }
-void getrenntCb(uint16_t verbindung, uint8_t grund) { neuGetrennt = true; }
+// letzte Trennung merken (Grund laut Bluetooth-Standard), fuer die Fehlersuche
+volatile uint8_t  trennGrund = 0;
+volatile uint32_t trennZeitMs = 0;
+volatile uint16_t trennAnzahl = 0;
+void getrenntCb(uint16_t verbindung, uint8_t grund) {
+  neuGetrennt = true;
+  trennGrund = grund;
+  trennZeitMs = millis();
+  trennAnzahl++;
+}
 
 void bluetoothStarten() {
   Bluefruit.autoConnLed(false);               // blaue LED nicht blinken lassen

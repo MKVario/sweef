@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.37"
+#define FW_VERSION "2.10.38"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -2718,6 +2718,7 @@ void befehlEmpfangen(uint16_t verbindung, BLECharacteristic* chr, uint8_t* daten
 
 // ---- Info-Kanal: "id=A3F2;nm=Sweef-A3F2;zs=;pin=1;ok=0;fw=2.10;gt=..." ----
 extern volatile uint8_t trennGrund; extern volatile uint32_t trennZeitMs; extern volatile uint16_t trennAnzahl;
+extern uint16_t werbungNeu;
 void infoAnHandy() {
   char buf[200], name[24];
   geraeteName(name, sizeof(name));
@@ -2727,6 +2728,7 @@ void infoAnHandy() {
   if (trennAnzahl)                      // letzte Trennung: Grund, vor wie vielen s, Anzahl seit Start
     n += snprintf(buf + n, sizeof(buf) - n, ";tr=%u,%lu,%u", trennGrund,
                   (unsigned long)((millis() - trennZeitMs) / 1000), trennAnzahl);
+  if (werbungNeu) n += snprintf(buf + n, sizeof(buf) - n, ";aw=%u", werbungNeu);
   chrInfo.write(buf, n);
   if (Bluefruit.connected()) chrInfo.notify(buf, n);
 }
@@ -3003,7 +3005,19 @@ void flugspeicherLoeschen() {
   chrDaten.notify("X,1", 3);
 }
 
+uint16_t werbungNeu = 0;                 // wie oft die Werbung neu gestartet werden musste
 void bluetoothArbeiten() {
+  // Aufpasser: ohne Verbindung muss das Vario immer sichtbar sein. Laeuft die
+  // Werbung nicht (mehr), wird sie neu gestartet.
+  static unsigned long letzterBlick = 0;
+  if (millis() - letzterBlick > 10000) {
+    letzterBlick = millis();
+    if (!Bluefruit.connected() && !Bluefruit.Advertising.isRunning()) {
+      Bluefruit.Advertising.restartOnDisconnect(true);
+      Bluefruit.Advertising.start(0);
+      werbungNeu++;
+    }
+  }
   if (neuGetrennt) {
     neuGetrennt = false;
     freigegeben = false;

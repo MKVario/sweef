@@ -688,7 +688,7 @@ const TRENN_GRUND = { 8: "Verbindung verloren (Funk-Zeitüberschreitung)", 19: "
 function trennungZeigen(tr) {
   const el = $("trennInfo");
   if (!el) return;
-  if (!tr) { el.hidden = true; return; }
+  if (!tr) { el.hidden = true; el.textContent = ""; return; }
   const [g, s, n] = tr.split(",").map(Number);
   const vor = s < 120 ? `${s} s` : s < 7200 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1).replace(".", ",")} h`;
   el.textContent = `Letzte Trennung vor ${vor}: ${TRENN_GRUND[g] || "Code " + g} · ${n}× seit dem Einschalten`;
@@ -697,6 +697,7 @@ function trennungZeigen(tr) {
 function infoZeigen(text) {
   const d = zerlegen(text);
   trennungZeigen(d.tr);
+  if (d.aw && $("trennInfo")) { $("trennInfo").hidden = false; $("trennInfo").textContent += (d.tr ? " · " : "") + `Sichtbarkeit ${d.aw}× neu gestartet`; }
   varioInfoDaten = Object.assign(varioInfoDaten, d);
   if (document.activeElement !== $("nameZusatz")) $("nameZusatz").value = d.zs || "";
   $("nameZusatz").placeholder = d.id || "ID";

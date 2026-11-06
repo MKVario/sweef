@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.38"
+#define FW_VERSION "2.10.39"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -186,6 +186,24 @@ bool platineErkennen() {
   if (Wire.requestFrom(0x40, 2) < 2) return false;
   uint16_t id = (Wire.read() << 8) | Wire.read();
   return id == 0x5449;                                // "TI"
+}
+
+// INA226 (Strommessung, 0x40): Register schreiben / Betriebsart
+void inaSchreiben(uint8_t reg, uint16_t wert) {
+  Wire.beginTransmission(0x40);
+  Wire.write(reg); Wire.write(wert >> 8); Wire.write(wert & 0xFF);
+  Wire.endTransmission();
+}
+// Im Tiefschlaf aus (Power-Down, ca. 2 uA statt 330 uA)
+void inaSchlafen() { inaSchreiben(0x00, 0x4120); }
+
+// Kompass LIS2MDL (0x1E) vorhanden? WHO_AM_I (0x4F) = 0x40
+bool kompassDa() {
+  Wire.beginTransmission(0x1E);
+  Wire.write(0x4F);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom(0x1E, 1) < 1) return false;
+  return Wire.read() == 0x40;
 }
 
 // Display an/aus. Auf der Platine mit 13-V-Wandler in der Reihenfolge laut
@@ -2143,16 +2161,19 @@ void warteMessend(unsigned long ms) {
 // Zeigt, ob alle Teile da sind. Bei Fehler: tiefe Pieps, laenger anzeigen.
 void selbsttest() {
   struct { const char* name; bool ok; } t[] = {
-    {"Druck", sensorOk}, {"Lage", imuOk}, {"Daten", flashOk}
+    {"Druck", sensorOk}, {"Lage", imuOk}, {"Daten", flashOk},
+    {"Kompass", platine && kompassDa()}, {"Strom", platine && platineErkennen()}
   };
+  int n = platine ? 5 : 3;                 // Kompass und Strom nur auf der Platine
+  int y0 = platine ? 32 : 36, dy = platine ? 13 : 16;
   bool fehler = false;
   anzeige.clearBuffer();
   anzeige.setFont(u8g2_font_9x15B_tf);
   anzeige.drawStr(textMitte("Selbsttest"), 14, "Selbsttest");
   anzeige.drawHLine(0, 19, BR);
   anzeige.setFont(u8g2_font_7x14B_tf);
-  for (int i = 0; i < 3; i++) {
-    int y = 36 + i * 16;
+  for (int i = 0; i < n; i++) {
+    int y = y0 + i * dy;
     anzeige.drawStr(6, y, t[i].name);
     const char* e = t[i].ok ? ((i == 2 && flashGerettet) ? "OK*" : "OK") : "FEHLT";
     anzeige.drawStr(122 - anzeige.getStrWidth(e), y, e);
@@ -2161,9 +2182,10 @@ void selbsttest() {
   char a[12];
   if (akkuFehlt()) snprintf(a, sizeof(a), "--");
   else             snprintf(a, sizeof(a), "%d%%", akkuProzent());
-  anzeige.drawStr(6, 84, "Akku");
-  anzeige.drawStr(122 - anzeige.getStrWidth(a), 84, a);
-  anzeige.drawHLine(0, 92, BR);
+  int ya = y0 + n * dy;
+  anzeige.drawStr(6, ya, "Akku");
+  anzeige.drawStr(122 - anzeige.getStrWidth(a), ya, a);
+  anzeige.drawHLine(0, ya + 5, BR);
   if (fehler) {
     if (!flashOk) {                        // Kennung des Datenspeichers zeigen
       char k[28];
@@ -2296,6 +2318,10 @@ void tiefschlaf() {
   flugspeicherSchlafen();
   verstaerkerAus();                                // Verstaerker aus
   anzeigeStrom(false);                         // Display aus
+  if (platine) {
+    inaSchlafen();                                 // Strommessung aus
+    digitalWrite(PIN_OLED_RES, LOW);               // Display im Reset, kein Strom ueber R21
+  }
   if (sensorOk) dps.setMode(DPS310_IDLE);          // Drucksensor schlafen
   digitalWrite(PIN_LSM6DS3TR_C_POWER, LOW);        // Bewegungssensor aus
   warteTaste1Los();                                // sonst sofort wieder wach

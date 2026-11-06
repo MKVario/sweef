@@ -482,6 +482,7 @@ details:not(.sektion) > summary { cursor: pointer; font-weight: 600; padding: 10
     <section>
       <h2>Darstellung</h2>
       <label class="schalter"><span><b>Helle Farben</b><small>Besser lesbar in praller Sonne</small></span><input type="checkbox" class="switch" id="hellSchalter"></label>
+      <label class="schalter"><span><b>Strom anzeigen</b><small>Akkustrom (mA) und Verbrauch (mAh) – nur bei Varios mit eigener Platine</small></span><input type="checkbox" class="switch" id="stromSchalter"></label>
     </section>
     <section class="braucht-vario">
       <h2>Zurücksetzen</h2>
@@ -742,7 +743,8 @@ function einstellungenZeigen(text) {
 let akkuLive = null;                                  // letzte Akku-Werte vom Vario
 function liveZeigen(text) {
   const d = zerlegen(text);
-  if ("ak" in d) akkuLive = { p: parseInt(d.ak), v: d.av ? parseInt(d.av) / 1000 : null, ld: d.ld === "1", us: d.us === "1", zeit: Date.now() };
+  if ("ak" in d) akkuLive = { p: parseInt(d.ak), v: d.av ? parseInt(d.av) / 1000 : null, ld: d.ld === "1", us: d.us === "1", zeit: Date.now(),
+                              ma: "ma" in d ? parseInt(d.ma) / 10 : null, mh: "mh" in d ? parseInt(d.mh) / 10 : null };
   const v = parseFloat(d.v);
   const el = $("lv");
   el.textContent = (v > 0 ? "+" : "") + zahl(v, 0.1);
@@ -755,7 +757,8 @@ function liveZeigen(text) {
   if ("ls" in d) stufeZeigen(d.ls);
   if ("ak" in d) {
     const ak = parseInt(d.ak);
-    $("lak").textContent = d.ld === "1" ? `lädt · ${ak} %` : `${ak} %`;
+    $("lak").textContent = (d.ld === "1" ? `lädt · ${ak} %` : `${ak} %`) +
+      (stromZeigen() && "ma" in d ? ` · ${zahl(parseInt(d.ma) / 10, 0.1)} mA` : "");
     $("lak").style.color = ak <= 10 && d.ld !== "1" ? "var(--sinken)" : "";
   }
   if (d.fl !== "1" && d.gb === "1") $("lfl").textContent = "am Boden · stumm";
@@ -1966,6 +1969,13 @@ $("hellSchalter").onchange = () => {
   if (aktuellerFlug && !$("flugDetail").hidden) kurveZeichnen(aktuellerFlug, aktuellerFlug.werte || auswerten(aktuellerFlug));
 };
 if (document.documentElement.dataset.theme === "light") document.querySelector('meta[name="theme-color"]').content = "#F2F5F4";
+// ---- Strom anzeigen (nur App, Vario-Display bleibt unveraendert) ----
+function stromZeigen() { try { return localStorage.getItem("sweefStrom") === "1"; } catch (e) { return false; } }
+$("stromSchalter").checked = stromZeigen();
+$("stromSchalter").onchange = () => {
+  try { localStorage.setItem("sweefStrom", $("stromSchalter").checked ? "1" : "0"); } catch (e) {}
+  alZeigen();
+};
 stufeZeigen(-1);
 
 // ================================================================
@@ -1990,7 +2000,9 @@ function alMessen() {
   if (!akkuLog.an) return;
   const a = akkuLive;
   if (!a || Date.now() - a.zeit > 15000) return;      // gerade keine Verbindung
-  akkuLog.eintraege.push({ t: Date.now(), p: a.p, v: a.v, ld: a.ld ? 1 : 0, us: a.us ? 1 : 0 });
+  const punkt = { t: Date.now(), p: a.p, v: a.v, ld: a.ld ? 1 : 0, us: a.us ? 1 : 0 };
+  if (a.ma != null) { punkt.ma = a.ma; punkt.mh = a.mh; }
+  akkuLog.eintraege.push(punkt);
   alSpeichern(); alZeigen();
 }
 setInterval(alMessen, 60000);
@@ -2015,6 +2027,10 @@ function alZeigen() {
     const verbrauch = !laedt && dauer > 15 * 60000 ? (erst.p - letzt.p) / (dauer / 3600000) : null;
     w.push(["Verbrauch", verbrauch != null && verbrauch > 0 ? zahl(verbrauch, 0.1) + " %/h" : "–", ""]);
     w.push(["Rest (geschätzt)", verbrauch > 0 ? hm(letzt.p / verbrauch * 3600000) : "–", ""]);
+    if (stromZeigen() && letzt.ma != null) {
+      w.push(["Strom", zahl(letzt.ma, 0.1) + " mA", ""]);
+      if (!laedt) w.push(["Verbraucht", zahl(letzt.mh, 0.1) + " mAh", ""]);
+    }
     w.push(["Messpunkte", String(n), ""]);
   }
   $("alWerte").innerHTML = w.map(([l, v, c]) => `<div><span class="lbl">${l}</span><span class="w ${c}">${v}</span></div>`).join("");
@@ -2074,11 +2090,13 @@ $("alStart").onclick = () => {
 $("alCsv").onclick = () => {
   const e = akkuLog.eintraege;
   if (!e.length) { melden("Noch keine Messpunkte"); return; }
-  const zeilen = ["Datum;Uhrzeit;Minuten;Akku_%;Spannung_V;Laedt;USB"];
+  const mitStrom = e.some(p => p.ma != null);
+  const zeilen = ["Datum;Uhrzeit;Minuten;Akku_%;Spannung_V;Laedt;USB" + (mitStrom ? ";Strom_mA;Verbraucht_mAh" : "")];
   e.forEach(p => {
     const d = new Date(p.t);
     zeilen.push([d.toLocaleDateString("de-DE"), d.toLocaleTimeString("de-DE"), Math.round((p.t - e[0].t) / 60000), p.p,
-                 p.v != null ? p.v.toFixed(3).replace(".", ",") : "", p.ld, p.us].join(";"));
+                 p.v != null ? p.v.toFixed(3).replace(".", ",") : "", p.ld, p.us]
+                 .concat(mitStrom ? [p.ma != null ? p.ma.toFixed(1).replace(".", ",") : "", p.mh != null ? p.mh.toFixed(1).replace(".", ",") : ""] : []).join(";"));
   });
   herunterladen("sweef_akku_" + new Date(e[0].t).toISOString().slice(0, 16).replace("T", "_").replace(":", "-") + ".csv",
                 "\ufeff" + zeilen.join("\n"), "text/csv;charset=utf-8");

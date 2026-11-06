@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.39"
+#define FW_VERSION "2.10.40"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -196,6 +196,31 @@ void inaSchreiben(uint8_t reg, uint16_t wert) {
 }
 // Im Tiefschlaf aus (Power-Down, ca. 2 uA statt 330 uA)
 void inaSchlafen() { inaSchreiben(0x00, 0x4120); }
+
+int16_t inaLesen(uint8_t reg) {
+  Wire.beginTransmission(0x40);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return 0;
+  if (Wire.requestFrom(0x40, 2) < 2) return 0;
+  return (int16_t)((Wire.read() << 8) | Wire.read());
+}
+
+// Strom aus dem Akku (mA, Laden = negativ) und verbrauchte mAh seit dem
+// letzten Abziehen des USB-Kabels. Einmal pro Sekunde eine Einzelmessung
+// (16 Mittelwerte, ca. 35 ms), danach schaltet sich der INA226 selbst ab.
+float stromMa = 0, verbrauchMah = 0;
+void stromMessen() {
+  static unsigned long letzte = 0;
+  if (!platine || millis() - letzte < 1000) return;
+  unsigned long dt = millis() - letzte;
+  letzte = millis();
+  // Ergebnis der letzten Einzelmessung: Shunt-Spannung, LSB 2,5 uV an 0,1 Ohm = 0,025 mA
+  stromMa = inaLesen(0x01) * 0.025f;
+  bool usb = usbSteckt();
+  if (usb) verbrauchMah = 0;                       // gezaehlt wird ab dem Abziehen
+  else if (dt < 5000) verbrauchMah += stromMa * dt / 3600000.0f;
+  inaSchreiben(0x00, 0x4527);                      // naechste Einzelmessung (Shunt + Spannung, 16x)
+}
 
 // Kompass LIS2MDL (0x1E) vorhanden? WHO_AM_I (0x4F) = 0x40
 bool kompassDa() {
@@ -3077,7 +3102,7 @@ void bluetoothArbeiten() {
   unsigned long liveTakt = liveHintergrund ? max(2000UL, (unsigned long)LIVE_MS) : (unsigned long)LIVE_MS;
   if (Bluefruit.connected() && !gesperrt() && millis() - letzteLive >= liveTakt) {
     letzteLive = millis();
-    char buf[150], z1[16], z2[16];
+    char buf[190], z1[16], z2[16];
     zahlText(z1, sizeof(z1), vJetzt());
     zahlText(z2, sizeof(z2), hoeheNN());
     unsigned long minuten = flugGewesen ? flugDauerMs / 60000UL : 0;
@@ -3087,6 +3112,8 @@ void bluetoothArbeiten() {
                      akkuProzent(), (usbSteckt() && laedt()) ? 1 : 0, bodenStumm() ? 1 : 0,
                      (int)lroundf(gWert * 10), (int)lroundf(gMaxFlug * 10),
                      (int)lroundf(akkuV * 1000), usbSteckt() ? 1 : 0);   // av = Akkuspannung in mV
+    if (platine && n > 0 && n < (int)sizeof(buf))   // ma = Strom in 0,1 mA, mh = verbraucht in 0,1 mAh
+      n += snprintf(buf + n, sizeof(buf) - n, ";ma=%d;mh=%d", (int)lroundf(stromMa * 10), (int)lroundf(verbrauchMah * 10));
     chrLive.notify(buf, n);
   }
 }
@@ -3401,6 +3428,7 @@ void loop() {
   sonnePruefen();
   doppeltippPruefen();
   restzeitMessen();
+  stromMessen();
   if (speichernUm && (long)(millis() - speichernUm) >= 0) lautSpeichern();
   if (updateModusAb && (long)(millis() - updateModusAb) >= 0) updateModusStarten();
   if (frageBis && (!frageAktiv() || imFlug)) { frageBis = 0; antwort("S,2"); }   // keine Antwort / gestartet

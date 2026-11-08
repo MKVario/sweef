@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.40"
+#define FW_VERSION "2.10.41"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -99,6 +99,7 @@ const int NULL_FREQ  = 380;    // Hz, tiefer Ton
 // Display um 180 Grad drehen (Vario andersherum am Gurt)
 bool  DISPLAY_DREHEN = false;
 int   HELLIGKEIT     = 100;  // Display-Helligkeit in % (per Handy einstellbar)
+int   DISPLAY_TAKT   = 0;    // Test: Takt/Vorladung/VCOMH des Displayglases (Platine v5), 0 = Datenblatt
 bool  G_AUTO         = true;   // in Spiralen G-Last statt Hoehe anzeigen
 float G_WARNUNG      = 0;      // g, ab hier Warnton (0 = aus)
 int   GEGENWIND_AB   = 5;      // km/h ueber Grund im Flug: darunter Gegenwind-Warnung (0 = aus)
@@ -242,6 +243,28 @@ void anzeigeStrom(bool an) {
     anzeige.setPowerSave(1);
     if (platine) digitalWrite(PIN_BOOST_EIN, LOW);
   }
+}
+
+// Displayglas GME128128-02 (Platine v5): Takt (0xD5), Ent-/Vorladezeit (0xD9)
+// und VCOMH (0xDB). Variante 0 = Datenblatt. Die anderen Varianten sind zum
+// Strom-Sparen-Test: niedrigerer Takt und kuerzere Vorladung brauchen weniger
+// Strom aus den 13 V, koennen aber flimmern oder blasser aussehen.
+const uint8_t TAKT_VARIANTEN[][3] = {
+  {0x80, 0x1D, 0x35},   // 0 Datenblatt
+  {0x50, 0x1D, 0x35},   // 1 Takt Grundwert
+  {0x50, 0x22, 0x35},   // 2 + Vorladung Grundwert
+  {0x30, 0x22, 0x35},   // 3 Takt niedriger
+  {0x30, 0x22, 0x20},   // 4 + VCOMH niedriger
+  {0x10, 0x22, 0x20},   // 5 Takt sehr niedrig
+  {0x30, 0x11, 0x20},   // 6 Vorladung kurz
+  {0x00, 0x22, 0x20},   // 7 Takt minimal
+};
+void displayTakt() {
+  if (!platine) return;
+  int v = constrain(DISPLAY_TAKT, 0, 7);
+  anzeige.sendF("ca", 0xD5, TAKT_VARIANTEN[v][0]);
+  anzeige.sendF("ca", 0xD9, TAKT_VARIANTEN[v][1]);
+  anzeige.sendF("ca", 0xDB, TAKT_VARIANTEN[v][2]);
 }
 LSM6DS3 imu(I2C_MODE, 0x6A);
 
@@ -1769,6 +1792,7 @@ uint8_t kontrast() {
 void displayAusrichten() {
   anzeige.setDisplayRotation(DISPLAY_DREHEN ? U8G2_R2 : U8G2_R0);
   anzeige.setContrast(kontrast());
+  displayTakt();
 }
 
 int textMitte(const char* t) { return (BR - anzeige.getUTF8Width(t)) / 2; }
@@ -2539,6 +2563,7 @@ Einstellung EINST[] = {
   {"nb", 'f', &NULL_AB,           -1.5,   0.0},   // Nullschieber ab (m/s)
   {"dr", 'b', &DISPLAY_DREHEN,       0,     1},   // Display 180 Grad
   {"hl", 'i', &HELLIGKEIT,           5,   100},   // Display-Helligkeit (%)
+  {"dk",  'i', &DISPLAY_TAKT,         0,     7},   // Test: Display-Takt-Variante (Platine v5)
   {"ga", 'b', &G_AUTO,               0,     1},   // G-Anzeige automatisch
   {"gw", 'f', &G_WARNUNG,          0.0,   8.0},   // G-Warnung ab (g), 0 = aus
   {"la", 'i', &LIVE_MS,            100,  2000},   // Live-Werte ans Handy alle ... ms
@@ -3339,8 +3364,7 @@ void setup() {
   if (platine) {                     // Displayglas: erst einstellen, dann einschalten
     anzeige.initDisplay();
     anzeige.sendF("ca", 0xAD, 0x80); // interne Ladepumpe aus (13 V kommen vom Wandler)
-    anzeige.sendF("ca", 0xD5, 0x80); // Takt und Vorladezeit laut Datenblatt GME128128-02
-    anzeige.sendF("ca", 0xD9, 0x1D);
+    displayTakt();                   // Takt, Vorladezeit, VCOMH (Variante 0 = Datenblatt)
     anzeige.clearDisplay();
     anzeige.setPowerSave(0);
   } else {

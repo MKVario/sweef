@@ -31,7 +31,7 @@ tools/test_sketches/                    kleine Arduino-Testprogramme
 - `release.yml` („Veroeffentlichen“): bei Push auf `main`, **nur** wenn `firmware/**`, `android-app/**`, `index.html` oder Workflows geändert sind. Baut Firmware (groß+klein, `.hex` + DFU-`.zip`) und APK, legt Release `v<FW>-app<N>` an.
 - Firmware: `arduino-cli`, FQBN `Seeeduino:nrf52:xiaonRF52840Sense`, Libs: Adafruit DPS310, U8g2, Seeed Arduino LSM6DS3, Adafruit SPIFlash; Flag `-DDISPLAY_KLEIN=0/1`.
 - App-Nummer: `APP_NR = git rev-list --count HEAD -- index.html android-app manifest.webmanifest icon-192.png icon-512.png` (android.yml mit `fetch-depth: 0`); `build.gradle.kts` liest `APP_NR`, release.yml liest die Nummer aus dem APK-Namen.
-- Signatur: Keystore + Secret `SWEEF_KEYSTORE_PW` liegen als GitHub-Secrets. Den Keystore **nie** ins Repo legen.
+- Signatur: Keystore liegt in `android-app/signatur/sweef.jks`, das Passwort **nur** als GitHub-Secret `SWEEF_KEYSTORE_PW`. Das Passwort nie ins Repo schreiben. Ohne denselben Keystore lassen sich App-Updates nicht über die alte App installieren.
 - Update aufs Vario: per Bluetooth aus der App (Befehl `dfu` → Adafruit-Bootloader; MTU 23, PRN 4). Auf Platine v5 bleibt das Display beim Update dunkel (Bootloader setzt D7/D6 auf Low) – normal.
 
 ## Hardware

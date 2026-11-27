@@ -62,7 +62,7 @@
 #include <Adafruit_SPIFlash.h>
 using namespace Adafruit_LittleFS_Namespace;
 
-#define FW_VERSION "2.10.41"
+#define FW_VERSION "2.10.42"
 unsigned long updateModusAb = 0;     // >0: Bootloader fuer Bluetooth-Update starten
 // Geschwindigkeit ueber Grund vom Handy-GPS ("gs=28.4" in km/h, jede Sekunde)
 volatile float gsKmh = -1;
@@ -1782,6 +1782,7 @@ void selbsttest() {
 // ---------- Anzeige 128 x 128 (1,5" OLED, SH1107) ----------
 const int BR = 128;                    // Breite in Pixel
 const int HO = 128;                    // Hoehe in Pixel
+const int OBEN = 4;                    // Hauptbild 4 Pixel hoeher (Gehaeusefenster, ab 2.10.42)
 
 // Helligkeit in % -> Kontrastwert des Displays (quadratisch, damit es unten feiner geht)
 uint8_t kontrast() {
@@ -1802,8 +1803,8 @@ void lautSymbol() {
   for (int i = 0; i < LAUT_STUFEN; i++) {
     int hoehe = 3 + i;
     int x = 2 + i * 6;
-    if (i < lautStufe) anzeige.drawBox(x, HO - hoehe, 4, hoehe);
-    else               anzeige.drawHLine(x, HO - 1, 4);
+    if (i < lautStufe) anzeige.drawBox(x, HO - OBEN - hoehe, 4, hoehe);
+    else               anzeige.drawHLine(x, HO - OBEN - 1, 4);
   }
 }
 
@@ -1823,7 +1824,7 @@ void linieClip(int ax, int ay, int bx, int by, int xmin, int ymin, int xmax, int
 }
 
 // Linie im Pfeilbereich (oben), vorher zugeschnitten
-void linieZ(int ax, int ay, int bx, int by) { linieClip(ax, ay, bx, by, 0, 0, BR - 1, 60); }
+void linieZ(int ax, int ay, int bx, int by) { linieClip(ax, ay, bx, by, 0, 0, BR - 1, 60 - OBEN); }
 
 // Ein Pfeil (52 Pixel hoch). y = Oberkante, nachOben = Spitze oben
 void einPfeil(int y, bool nachOben) {
@@ -1847,7 +1848,7 @@ void einPfeil(int y, bool nachOben) {
 }
 
 // Zeichnet die wandernden Pfeile im oberen Bereich (0..60)
-const int PFEIL_ZONE = 61;
+const int PFEIL_ZONE = 61 - OBEN;
 void pfeileZeichnen() {
   float v = vJetzt();
   static float pos = 0;
@@ -1868,7 +1869,7 @@ void pfeileZeichnen() {
   int versatz = (int)pos;
   int start = hoch ? -versatz : versatz - ABSTAND;
   anzeige.setClipWindow(0, 0, BR, PFEIL_ZONE);
-  for (int k = 0; k < 3; k++) einPfeil(start + k * ABSTAND + 4, hoch);
+  for (int k = 0; k < 3; k++) einPfeil(start + k * ABSTAND + 4 - OBEN, hoch);
   anzeige.setMaxClipWindow();
 }
 
@@ -1896,9 +1897,9 @@ bool    maskeGedreht = false;
 
 void zahlZeichnen(const char* text, int xz, int breite) {
   anzeige.setFont(u8g2_font_logisoso38_tn);
-  anzeige.drawStr(xz, 48, text);
+  anzeige.drawStr(xz, 48 - OBEN, text);
   anzeige.setFont(u8g2_font_helvB12_tf);
-  anzeige.drawStr(xz + breite + 3, 48, "m/s");
+  anzeige.drawStr(xz + breite + 3, 48 - OBEN, "m/s");
 }
 
 void maskeBauen(const char* text, int xz, int breite) {
@@ -1993,37 +1994,37 @@ void bildZeichnen() {
   if (gModus) {
     // G-Last (gross) statt Hoehe
     anzeige.setFont(u8g2_font_7x14B_tf);
-    anzeige.drawUTF8(2, 80, "G-Last");
+    anzeige.drawUTF8(2, 80 - OBEN, "G-Last");
     int g10 = (int)lroundf(gWert * 10);
     snprintf(text, sizeof(text), "%d.%d", g10 / 10, g10 % 10);
     anzeige.setFont(u8g2_font_logisoso20_tn);
     int bg = anzeige.getStrWidth(text);
-    anzeige.drawStr(111 - bg, 87, text);
+    anzeige.drawStr(111 - bg, 87 - OBEN, text);
     anzeige.setFont(u8g2_font_helvB12_tf);
-    anzeige.drawStr(115, 87, "g");
+    anzeige.drawStr(115, 87 - OBEN, "g");
   } else {
     // Hoehe ueber Startplatz (gross)
     anzeige.setFont(u8g2_font_7x14B_tf);
-    anzeige.drawUTF8(2, 80, "Höhe");
+    anzeige.drawUTF8(2, 80 - OBEN, "Höhe");
     snprintf(text, sizeof(text), "%d", (int)round(h));
     anzeige.setFont(u8g2_font_logisoso20_tn);
     int bh = anzeige.getStrWidth(text);
-    anzeige.drawStr(111 - bh, 87, text);
+    anzeige.drawStr(111 - bh, 87 - OBEN, text);
     anzeige.setFont(u8g2_font_helvB12_tf);
-    anzeige.drawStr(114, 87, "m");
+    anzeige.drawStr(114, 87 - OBEN, "m");
   }
 
   // Hoehe ueber Meer, Maximum, Flugzeit
   anzeige.setFont(u8g2_font_6x12_tf);
   snprintf(text, sizeof(text), "NN %d", (int)round(hoeheNN()));
-  anzeige.drawStr(2, 101, text);
+  anzeige.drawStr(2, 101 - OBEN, text);
   if (gModus) {                              // in der Spirale: hoechste G-Last
     int gm = (int)lroundf(gMaxFlug * 10);
     snprintf(text, sizeof(text), "Gmax %d.%d", gm / 10, gm % 10);
   } else if (flugGewesen) snprintf(text, sizeof(text), "Max %d", (int)round(maxHoehe));
   else             snprintf(text, sizeof(text), "Max --");
   int maxX = 126 - anzeige.getStrWidth(text);
-  anzeige.drawStr(maxX, 101, text);
+  anzeige.drawStr(maxX, 101 - OBEN, text);
   if (WIND_ANZEIGEN && windDa()) {           // Wind in der Mitte, wenn Platz ist
     char nn[12];
     snprintf(nn, sizeof(nn), "NN %d", (int)round(hoeheNN()));
@@ -2032,7 +2033,7 @@ void bildZeichnen() {
     int bw = anzeige.getStrWidth(text);
     int x = (BR - bw) / 2;
     if (x < nnEnde + 4) x = nnEnde + 4;
-    if (x + bw < maxX - 3) anzeige.drawStr(x, 101, text);
+    if (x + bw < maxX - 3) anzeige.drawStr(x, 101 - OBEN, text);
   }
 
   if (flugGewesen) {
@@ -2041,31 +2042,31 @@ void bildZeichnen() {
   } else {
     snprintf(text, sizeof(text), "Zeit -:--");
   }
-  anzeige.drawStr(2, 114, text);
-  if (imFlug && (millis() / 500) % 2) anzeige.drawDisc(70, 110, 2);   // blinkt im Flug
-  if (!imuOk) anzeige.drawStr(96, 114, "!IMU");
+  anzeige.drawStr(2, 114 - OBEN, text);
+  if (imFlug && (millis() / 500) % 2) anzeige.drawDisc(70, 110 - OBEN, 2);   // blinkt im Flug
+  if (!imuOk) anzeige.drawStr(96, 114 - OBEN, "!IMU");
   else if (gsDa()) {                         // Geschwindigkeit ueber Grund (Handy-GPS)
     snprintf(text, sizeof(text), "%d km/h", (int)lroundf(gsKmh));
-    anzeige.drawStr(126 - anzeige.getStrWidth(text), 114, text);
+    anzeige.drawStr(126 - anzeige.getStrWidth(text), 114 - OBEN, text);
   }
 
-  anzeige.drawHLine(0, 117, BR);
+  anzeige.drawHLine(0, 117 - OBEN, BR);
 
   // Statuszeile: Lautstaerke, Akku, Bluetooth
-  if (belastungStufe)     anzeige.drawStr(2, 127, "TEST");
-  else if (lautStufe == 0) anzeige.drawStr(2, 127, "stumm");
-  else if (bodenStumm())  anzeige.drawStr(2, 127, "Boden");   // Ton erst nach Start
+  if (belastungStufe)     anzeige.drawStr(2, 127 - OBEN, "TEST");
+  else if (lautStufe == 0) anzeige.drawStr(2, 127 - OBEN, "stumm");
+  else if (bodenStumm())  anzeige.drawStr(2, 127 - OBEN, "Boden");   // Ton erst nach Start
   else                    lautSymbol();
-  akkuSymbol(52, 120);
+  akkuSymbol(52, 120 - OBEN);
   if (!akkuFehlt()) {
     if (RESTZEIT && restMin >= 0) {
       int st = restMin / 60;
       if (st >= 10) snprintf(text, sizeof(text), "%dh", st);
       else          snprintf(text, sizeof(text), "%d:%02dh", st, restMin % 60);
     } else snprintf(text, sizeof(text), "%d%%", akkuProzent());
-    anzeige.drawStr(72, 127, text);
+    anzeige.drawStr(72, 127 - OBEN, text);
   }
-  if (Bluefruit.connected()) anzeige.drawStr(112, 127, "BT");
+  if (Bluefruit.connected()) anzeige.drawStr(112, 127 - OBEN, "BT");
 
   // Hinweise ueber allem: Akkuwarnung, Vario suchen
   if (warnBis && (long)(millis() - warnBis) < 0) hinweisBox(warnTitel, warnText);
